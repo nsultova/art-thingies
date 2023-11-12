@@ -1,49 +1,41 @@
+"""
+Inspired by tutorial:
+https://www.generativehut.com/post/generative-art-python-tutorial-for-penplotter
+"""
 import vsketch
 import numpy as np
 
-INTERPOLATION_STEPS = 9
 
 class RandomLinesSketch(vsketch.SketchClass):
-    # Sketch parameters:
-    # radius = vsketch.Param(2.0)
+    ROWS = 20
+    COLS = 25
+    INTERPOLATION_STEPS = 9
 
     def draw(self, vsk: vsketch.Vsketch) -> None:
         vsk.size("a3", landscape=False)
         vsk.scale("cm")
-
-        # implement your sketch here
-        # vsk.circle(0, 0, self.radius, mode="radius")
-        allColumnsPoints = []
-        for row in range(20):
-            columnPoints = []
-            for col in range(25):
-                x = row + vsk.random(1.5)
-                y = col + vsk.random(1)
-                # vsk.point(x,y)
-                columnPoints.append((x,y))
-            allColumnsPoints.append(columnPoints)
         
-        for idx in range(len(allColumnsPoints) -1):
-            currentColumnPoints = allColumnsPoints[idx]
-            nextColumnPoints = allColumnsPoints[idx+1]
+        # outer loop: list(pts) per row
+        # inner loop: create (x,y) for each col in current row
+        # [ [(0, 0), (0,1), (0,2)], [(1,0),(1,1), (1,2)], ..]
+        all_column_pts = [ 
+            [(row + vsk.random(1.5), col + vsk.random(1)) for col in range(self.COLS)]
+            for row in range(self.ROWS)
+        ]
 
-            curr = list(zip(*currentColumnPoints))
-            x_curr = np.array(curr[0]) # (x1,x2,x3,…)
-            y_curr = np.array(curr[1]) # (y1,y2,y3,…)
+        for idx in range(len(all_column_pts) -1):
+            curr = list(zip(*all_column_pts[idx]))
+            nxt = list(zip(*all_column_pts[idx+1]))
+                       
+            x_curr, y_curr = map(np.array, curr)
+            x_nxt, y_nxt = map(np.array, nxt)
 
-            nxt = list(zip(*nextColumnPoints))
-            x_nxt = np.array(nxt[0])
-            y_nxt = np.array(nxt[1])
+            for step in range(self.INTERPOLATION_STEPS):
+                x_inp = vsk.lerp(x_curr, x_nxt, step/self.INTERPOLATION_STEPS)
+                y_inp = vsk.lerp(y_curr, y_nxt, step/self.INTERPOLATION_STEPS)
 
-            for step in range(INTERPOLATION_STEPS):
-                x_inp = vsk.lerp(x_curr, x_nxt, step/INTERPOLATION_STEPS)
-                y_inp = vsk.lerp(y_curr, y_nxt, step/INTERPOLATION_STEPS)
-
-                coords_inp = zip(x_inp, y_inp)
-                vsk.polygon(coords_inp)
+                vsk.polygon(zip(x_inp, y_inp))
             
-
-
     def finalize(self, vsk: vsketch.Vsketch) -> None:
         vsk.vpype("linemerge linesimplify reloop linesort")
 
