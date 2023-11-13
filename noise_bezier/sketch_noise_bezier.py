@@ -3,6 +3,8 @@ import numpy as np
 import datetime
 import os
 
+# Example adapted from https://github.com/abey79/vsketch/tree/master/examples
+
 class NoiseBezierSketch(vsketch.SketchClass):
     N = vsketch.Param(100, 0) 
     freq = vsketch.Param(0.03, decimals=3) 
