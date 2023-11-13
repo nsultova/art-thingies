@@ -1,4 +1,5 @@
 import vsketch
+import numpy as np
 
 
 class NoiseBezierSketch(vsketch.SketchClass):
