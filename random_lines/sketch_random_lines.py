@@ -9,9 +9,11 @@ import os
 
 
 class RandomLinesSketch(vsketch.SketchClass):
-    ROWS = 20
-    COLS = 25
-    INTERPOLATION_STEPS = 5
+    ROWS = vsketch.Param(20, 0)
+    COLS = vsketch.Param(25, 0)
+    INTERPOLATION_STEPS = vsketch.Param(5,0)
+    RND01 = vsketch.Param(0.30, decimals=2)
+    RND02 = vsketch.Param(3.00, decimals=2)
 
     def draw(self, vsk: vsketch.Vsketch) -> None:
         vsk.size("a3", landscape=False)
@@ -21,7 +23,7 @@ class RandomLinesSketch(vsketch.SketchClass):
         # inner loop: create (x,y) for each col in current row
         # [ [(0, 0), (0,1), (0,2)], [(1,0),(1,1), (1,2)], ..]
         all_column_pts = [ 
-            [(row + vsk.random(5), col + vsk.random(0.3)) for col in range(self.COLS)]
+            [(row + vsk.random(self.RND01), col + vsk.random(self.RND02)) for col in range(self.COLS)]
             for row in range(self.ROWS)
         ]
 
