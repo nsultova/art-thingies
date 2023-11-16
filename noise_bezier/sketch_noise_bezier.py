@@ -21,7 +21,8 @@ class NoiseBezierSketch(vsketch.SketchClass):
             vsk.bezier(*(perlin[i]* 10 + offset))
 
         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-        vsk.save(os.path.join("output", f"fig_{timestamp}.svg"))
+        path = os.path.join(os.getcwd(), "random_lines/output")
+        print(path)
 
     def finalize(self, vsk: vsketch.Vsketch) -> None:
         vsk.vpype("linemerge linesimplify reloop linesort")

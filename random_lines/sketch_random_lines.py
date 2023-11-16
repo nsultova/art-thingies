@@ -41,7 +41,10 @@ class RandomLinesSketch(vsketch.SketchClass):
                 vsk.polygon(zip(x_inp, y_inp))
         
         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-        vsk.save(os.path.join("output", f"fig_{timestamp}.svg"))
+        path = os.path.join(os.getcwd(), "random_lines/output")
+        print(path)
+        vsk.save(os.path.join(path, f"fig_{timestamp}.svg"))
+        # vsk.save(f"fig_{timestamp}.svg")
             
     def finalize(self, vsk: vsketch.Vsketch) -> None:
         vsk.vpype("linemerge linesimplify reloop linesort")
