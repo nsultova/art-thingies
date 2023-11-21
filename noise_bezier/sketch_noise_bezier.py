@@ -24,7 +24,7 @@ class NoiseBezierSketch(vsketch.SketchClass):
             vsk.bezier(*(perlin[i]* 10 + offset))
 
         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-        path = os.path.join(os.getcwd(), "random_lines/output")
+        path = os.path.join(os.getcwd(), "noise_bezier/output")
         print(path)
 
     def finalize(self, vsk: vsketch.Vsketch) -> None:
