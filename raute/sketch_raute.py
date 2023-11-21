@@ -28,21 +28,18 @@ class RauteSketch(vsketch.SketchClass):
         vsk.size("a4", landscape=False)
         vsk.scale("cm")
 
-        xs = []
-        ys = []
-
         self.rot_mat = self.calculate_rot_mat(180)
-        for i, r0 in enumerate(np.linspace(0,1,N)):
-            alpha = np.linspace(-np.pi, np.pi, self.K)
-            r = r0 * (1 + 0.5*np.sin(2*alpha * self.M*r0))
+        for i, r0 in enumerate(np.linspace(0,1, self.N.value)):
+            alpha = np.linspace(-np.pi, np.pi, self.K.value)
+            r = r0 * (1 + 0.5*np.sin(2*alpha * self.M.value*r0))
             x, y = r * np.cos(alpha), r * np.sin(alpha)
             x1, y1 = self.rot_mat @ [x,y]
-            xs.append(x)
-            xs.append(-x1)
-            ys.append(y)
-            ys.append(y1)
 
-        path = os.path.join(os.getcwd(), "random_lines/output")
+            # bc we have sets (x,y), (x1,y1)
+            for xi, yi, x1i, y1i in zip(x, y, x1, y1):
+                vsk.line(xi, yi, -x1i, y1i)
+
+        path = os.path.join(os.getcwd(), "raute/output")
         print(path)
 
     def finalize(self, vsk: vsketch.Vsketch) -> None:
