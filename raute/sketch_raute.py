@@ -29,28 +29,28 @@ class RauteSketch(vsketch.SketchClass):
         vsk.size("a4", landscape=False)
         vsk.scale("cm")
 
-        # square    
-        vsk.line(0,0,0,1)
-        vsk.line(0,1,1,1)
-        vsk.line(1,0, 1,1)
-        vsk.line(0,0,1,0)
+        self.rot_mat = self.calculate_rot_mat(180)
+        for i, r0 in enumerate(np.linspace(0,1, self.N.value)):
+            alpha = np.linspace(-np.pi, np.pi, self.K.value)
+            r = r0 * (1 + 0.5*np.sin(2*alpha * self.M.value*r0))
+            x, y = r * np.cos(alpha), r * np.sin(alpha)
+            x1, y1 = self.rot_mat @ [x,y]
+            print(f"x {x}")
+            print(f"y: {y}")
+            self.xs.append(x)
+            self.xs.append(-x1)
+            self.ys.append(y)
+            self.ys.append(y1)
 
-        # self.rot_mat = self.calculate_rot_mat(180)
-        # for i, r0 in enumerate(np.linspace(0,1, self.N.value)):
-        #     alpha = np.linspace(-np.pi, np.pi, self.K.value)
-        #     r = r0 * (1 + 0.5*np.sin(2*alpha * self.M.value*r0))
-        #     x, y = r * np.cos(alpha), r * np.sin(alpha)
-        #     x1, y1 = self.rot_mat @ [x,y]
-
-        #     # # bc we have sets (x,y), (x1,y1)
-        #     # for xi, yi, x1i, y1i in zip(x, y, x1, y1):
-        #     #     vsk.polygon([(xi, yi), (-x1i, y1i)])  # Create a path that passes through the points
-         
+        for (x,y) in zip(self.xs,self.ys):
+            for i in range(len(x) -1):
+                vsk.line(x[i],y[i], x[i+1], y[i+1])
+  
         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
         path = os.path.join(os.getcwd(), "raute/output")
         print(path)
         vsk.save(os.path.join(path, f"fig_{timestamp}.svg"))
-        # print(path)
+        print(path)
 
     def finalize(self, vsk: vsketch.Vsketch) -> None:
         vsk.vpype("linemerge linesimplify reloop linesort")
