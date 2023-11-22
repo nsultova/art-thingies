@@ -9,7 +9,7 @@ class RauteSketch(vsketch.SketchClass):
     def __init__(self):
         super().__init__()
         self.N = vsketch.Param(value = 30, min_value=1, max_value=100, step=5) 
-        self.K = vsketch.Param(value = 5, min_value=1, max_value=30, step=5)
+        self.K = vsketch.Param(value = 5, min_value=1, max_value=30, step=5) #K=4 also nice
         self.M = vsketch.Param(value = 5, min_value=1, max_value=30, step=5)
         self.rot_mat = None
         self.rot_angle = vsketch.Param(value=180, min_value=0, max_value=360, step=45)
@@ -27,7 +27,7 @@ class RauteSketch(vsketch.SketchClass):
 
     def draw(self, vsk: vsketch.Vsketch) -> None:
         vsk.size("a4", landscape=False)
-        vsk.scale("cm")
+        vsk.scale("7cm")
 
         self.rot_mat = self.calculate_rot_mat(180)
         for i, r0 in enumerate(np.linspace(0,1, self.N.value)):
@@ -42,9 +42,12 @@ class RauteSketch(vsketch.SketchClass):
             self.ys.append(y)
             self.ys.append(y1)
 
+
         for (x,y) in zip(self.xs,self.ys):
+            # print(f"x: {x}, len(x): {len(x)}")
             for i in range(len(x) -1):
                 vsk.line(x[i],y[i], x[i+1], y[i+1])
+                print(f"x[{i}]: {x[i]},  y[{i}]: {y[i]} | x1[{i+1}]: {x[i+1]}  y1[{i+1}]]")
   
         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
         path = os.path.join(os.getcwd(), "raute/output")
