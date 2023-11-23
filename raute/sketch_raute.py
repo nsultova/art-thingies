@@ -6,15 +6,14 @@ import os
 # Example adapted from https://github.com/abey79/vsketch/tree/master/examples
 
 class RauteSketch(vsketch.SketchClass):
-    def __init__(self):
-        super().__init__()
-        self.N = vsketch.Param(value = 30, min_value=1, max_value=100, step=5) 
-        self.K = vsketch.Param(value = 5, min_value=1, max_value=30, step=5) #K=4 also nice
-        self.M = vsketch.Param(value = 5, min_value=1, max_value=30, step=5)
-        self.rot_mat = None
-        self.rot_angle = vsketch.Param(value=180, min_value=0, max_value=360, step=45)
-        self.xs = []
-        self.ys = []
+    N = vsketch.Param(value = 30, min_value=1, max_value=100, step=5) 
+    print(f"N: {N}")
+    K = vsketch.Param(value = 5, min_value=1, max_value=30, step=5) #K=4 also nice
+    M = vsketch.Param(value = 5, min_value=1, max_value=30, step=5)
+    rot_mat = None
+    rot_angle = vsketch.Param(value=180, min_value=0, max_value=360, step=45)
+    xs = []
+    ys = []
 
     def calculate_rot_mat(self, rot_angle=None):
         if rot_angle is None:
@@ -30,9 +29,9 @@ class RauteSketch(vsketch.SketchClass):
         vsk.scale("7cm")
 
         self.rot_mat = self.calculate_rot_mat(180)
-        for i, r0 in enumerate(np.linspace(0,1, self.N.value)):
-            alpha = np.linspace(-np.pi, np.pi, self.K.value)
-            r = r0 * (1 + 0.5*np.sin(2*alpha * self.M.value*r0))
+        for i, r0 in enumerate(np.linspace(0,1, self.N)):
+            alpha = np.linspace(-np.pi, np.pi, self.K)
+            r = r0 * (1 + 0.5*np.sin(2*alpha * self.M*r0))
             x, y = r * np.cos(alpha), r * np.sin(alpha)
             x1, y1 = self.rot_mat @ [x,y]
             print(f"x {x}")
@@ -50,10 +49,11 @@ class RauteSketch(vsketch.SketchClass):
                 print(f"x[{i}]: {x[i]},  y[{i}]: {y[i]} | x1[{i+1}]: {x[i+1]}  y1[{i+1}]]")
   
         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-        path = os.path.join(os.getcwd(), "raute/output")
-        print(path)
-        vsk.save(os.path.join(path, f"fig_{timestamp}.svg"))
-        print(path)
+        # path = os.path.join(os.getcwd(), "raute/output")
+        # print(path)
+        # vsk.save(os.path.join(path, f"fig_{timestamp}.svg"))
+        # print(path)
+        vsk.save(f"fig_{timestamp}.svg")
 
     def finalize(self, vsk: vsketch.Vsketch) -> None:
         vsk.vpype("linemerge linesimplify reloop linesort")
