@@ -27,7 +27,8 @@ class RauteSketch(vsketch.SketchClass):
     def draw(self, vsk: vsketch.Vsketch) -> None:
         vsk.size("a4", landscape=False)
         vsk.scale("7cm")
-
+        self.xs = []
+        self.ys = [] # "flush" array, there must be a better way right?
         # self.rot_mat = self.calculate_rot_mat(180)
         for i, r0 in enumerate(np.linspace(0,1, self.N)):
             with vsk.pushMatrix():
