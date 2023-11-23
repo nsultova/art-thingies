@@ -1,7 +1,7 @@
 import vsketch
 
 
-class SpikySnailSketch(vsketch.SketchClass):
+class PlotterArtSketch(vsketch.SketchClass):
     # Sketch parameters:
     # radius = vsketch.Param(2.0)
 
@@ -17,4 +17,4 @@ class SpikySnailSketch(vsketch.SketchClass):
 
 
 if __name__ == "__main__":
-    SpikySnailSketch.display()
+    PlotterArtSketch.display()
