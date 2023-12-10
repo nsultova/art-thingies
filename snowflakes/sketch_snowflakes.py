@@ -29,11 +29,16 @@ class SnowflakesSketch(vsketch.SketchClass):
 
         return np.array(tmp_branch)
 
-    def generate_snowflake(self, sym_num, var_angle, radius, stop):
-        np.random.seed(255)
-        for i in range(sym_num):
-            branch = self.generate_branch(np.array([0,0]), self.radius, (2 * np.pi / self.symmetry_number) * i, self.stop_at_len, self.variance_branching_angle)
-            self.branches.extend(branch)
+    # def generate_snowflake(self, sym_num, var_angle, radius, stop):
+    #     np.random.seed(255)
+    #     for i in range(sym_num):
+    #         branch = self.generate_branch(np.array([0,0]), self.radius, (2 * np.pi / self.symmetry_number) * i, self.stop_at_len, self.variance_branching_angle)
+    #         self.branches.extend(branch)
+
+    def generate_snowflake(self):
+       np.random.seed(255)
+       self.branches = [self.generate_branch(np.array([0,0]), self.radius, (2 * np.pi / self.symmetry_number) * i, self.stop_at_len, self.variance_branching_angle) for i in range(self.symmetry_number)]
+
 
     def draw(self, vsk: vsketch.Vsketch) -> None:
         vsk.size("a4", landscape=False)
@@ -41,6 +46,10 @@ class SnowflakesSketch(vsketch.SketchClass):
 
         # implement your sketch here
         # vsk.circle(0, 0, self.radius, mode="radius")
+        for branch in self.branches:
+           for origin, end in branch:
+               vsk.line(origin, end)
+
 
     def finalize(self, vsk: vsketch.Vsketch) -> None:
         vsk.vpype("linemerge linesimplify reloop linesort")
