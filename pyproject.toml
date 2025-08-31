@@ -10,5 +10,6 @@ dependencies = [
     "jupyter>=1.1.1",
     "matplotlib>=3.10.6",
     "numpy>=2.3.2",
+    "opensimplex>=0.4.5.1",
     "vsketch>=1.2.0",
 ]
