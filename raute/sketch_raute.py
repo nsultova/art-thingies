@@ -46,12 +46,15 @@ class RauteSketch(vsketch.SketchClass):
                 self.ys.append(y)
                 self.ys.append(-y1)
 
-
+        print(f"xs:{self.xs}")
+        
         for (x,y) in zip(self.xs,self.ys):
+            # print(f" x: {x}       y: {y}")
+
             # print(f"x: {x}, len(x): {len(x)}")
             for i in range(len(x) -1):
                 vsk.line(x[i],y[i], x[i+1], y[i+1])
-                print(f"x[{i}]: {x[i]},  y[{i}]: {y[i]} | x1[{i+1}]: {x[i+1]}  y1[{i+1}]]")
+                #print(f"x[{i}]: {x[i]},  y[{i}]: {y[i]} | x1[{i+1}]: {x[i+1]}  y1[{i+1}]]")
 
         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
         # path = os.path.join(os.getcwd(), "raute/output")
