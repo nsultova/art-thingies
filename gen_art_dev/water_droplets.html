@@ -33,20 +33,20 @@
       display: flex;
       align-items: center;
       gap: 14px;
-      padding: 10px 18px;
+      padding: 11px 18px;
       border-bottom: 1px solid var(--border);
       flex-shrink: 0;
     }
 
     header h1 {
-      font-size: 13px;
+      font-size: 14px;
       font-weight: 600;
       color: var(--accent);
       letter-spacing: 0.06em;
     }
 
     header .subtitle {
-      font-size: 11px;
+      font-size: 12px;
       color: var(--text-dim);
     }
 
@@ -59,7 +59,7 @@
 
     /* ── Controls sidebar ───────────────────────────────────────────── */
     .controls {
-      width: 272px;
+      width: 295px;
       flex-shrink: 0;
       overflow-y: auto;
       border-right: 1px solid var(--border);
@@ -78,11 +78,11 @@
     }
 
     .group-header {
-      padding: 5px 10px;
+      padding: 6px 10px;
       background: var(--surface2);
-      font-size: 10px;
+      font-size: 11px;
       font-weight: 700;
-      letter-spacing: 0.12em;
+      letter-spacing: 0.10em;
       text-transform: uppercase;
       color: var(--text-dim);
       cursor: pointer;
@@ -103,7 +103,11 @@
       padding: 8px;
       display: flex;
       flex-direction: column;
-      gap: 9px;
+      gap: 10px;
+      overflow-y: auto;
+      max-height: 260px;
+      scrollbar-width: thin;
+      scrollbar-color: var(--border) transparent;
     }
 
     /* ── Individual parameter ───────────────────────────────────────── */
@@ -113,14 +117,14 @@
       display: flex;
       justify-content: space-between;
       align-items: baseline;
-      font-size: 11px;
+      font-size: 12px;
     }
 
     .param-name { color: var(--text); }
 
     .param-value {
       color: var(--accent);
-      font-size: 10px;
+      font-size: 11px;
       min-width: 36px;
       text-align: right;
     }
@@ -209,7 +213,7 @@
       color: var(--text);
       font-family: inherit;
       font-size: 12px;
-      padding: 4px 8px;
+      padding: 5px 8px;
       border-radius: 4px;
       width: 90px;
       outline: none;
@@ -223,8 +227,8 @@
       border: 1px solid var(--border);
       color: var(--text);
       font-family: inherit;
-      font-size: 11px;
-      padding: 5px 12px;
+      font-size: 12px;
+      padding: 6px 14px;
       border-radius: 4px;
       cursor: pointer;
       transition: border-color 0.15s, color 0.15s, background 0.15s;
@@ -337,21 +341,15 @@ const SCHEMA = [
     ],
   },
   {
-    group: 'Splash',
-    items: [
-      { id: 'splashRays',  label: 'Ray count',  min: 0,  max: 24,  step: 1,    def: 8    },
-      { id: 'rayLength',   label: 'Length (mm)',min: 0,  max: 30,  step: 0.5,  def: 8.0  },
-      { id: 'rayJitter',   label: 'Jitter',     min: 0,  max: 1.2, step: 0.05, def: 0.30 },
-      { id: 'rayInnerGap', label: 'Inner gap',  min: 0,  max: 1.5, step: 0.05, def: 0.25 },
-    ],
-  },
-  {
     group: 'Secondary Drops',
     items: [
-      { id: 'secDrops',   label: 'Count',        min: 0,   max: 14,  step: 1,   def: 5   },
-      { id: 'secRings',   label: 'Rings each',   min: 1,   max: 6,   step: 1,   def: 3   },
-      { id: 'secSpacing', label: 'Spacing (mm)', min: 0.2, max: 4,   step: 0.1, def: 0.9 },
-      { id: 'secRadius',  label: 'Scatter',      min: 0.5, max: 3,   step: 0.1, def: 1.4 },
+      { id: 'secDrops',      label: 'Count',        min: 0,   max: 20,  step: 1,    def: 5   },
+      { id: 'secRings',      label: 'Rings each',   min: 1,   max: 8,   step: 1,    def: 3   },
+      { id: 'secSpacing',    label: 'Spacing (mm)', min: 0.2, max: 4,   step: 0.1,  def: 0.9 },
+      { id: 'secRadius',     label: 'Scatter',      min: 0.5, max: 4,   step: 0.1,  def: 1.4 },
+      { id: 'secDistortion', label: 'Distortion',   min: 0,   max: 4,   step: 0.1,  def: 0   },
+      { id: 'secDistFreq',   label: 'Dist. freq',   min: 2,   max: 16,  step: 1,    def: 5   },
+      { id: 'secDistGrowth', label: 'Dist. growth', min: 0,   max: 0.5, step: 0.01, def: 0.1 },
     ],
   },
   {
@@ -481,23 +479,6 @@ function render() {
     const nRings     = Math.max(2, Math.floor(p.maxRings * age));
     const wavelength = p.ringSpacing * p.interferenceWave;
 
-    // Splash rays ──────────────────────────────────────────────────
-    const baseAngle = rand.uniform(0, 2 * Math.PI);
-    const innerR    = p.ringSpacing * p.rayInnerGap;
-
-    for (let i = 0; i < p.splashRays; i++) {
-      const angle  = baseAngle + i * (2 * Math.PI / p.splashRays) + rand.gauss() * p.rayJitter;
-      const rayLen = p.rayLength * rand.uniform(0.4, 1.0);
-
-      svgEl.appendChild(svgEl_('line', {
-        x1: cx + innerR          * Math.cos(angle) + ox,
-        y1: cy + innerR          * Math.sin(angle) + oy,
-        x2: cx + (innerR+rayLen) * Math.cos(angle) + ox,
-        y2: cy + (innerR+rayLen) * Math.sin(angle) + oy,
-        stroke: 'black', 'stroke-width': '0.5', fill: 'none',
-      }));
-    }
-
     // Ripple rings ─────────────────────────────────────────────────
     for (let ri = 0; ri < nRings; ri++) {
       const baseR   = p.ringSpacing * Math.pow(p.ringSpacingGrowth, ri);
@@ -543,17 +524,41 @@ function render() {
     // Secondary micro-drops ────────────────────────────────────────
     for (let i = 0; i < p.secDrops; i++) {
       const angle = rand.uniform(0, 2 * Math.PI);
-      const dist  = rand.uniform(p.ringSpacing * 0.7, p.rayLength * p.secRadius);
+      const dist  = rand.uniform(p.ringSpacing * 0.7, p.ringSpacing * 2 + p.secRadius * 8);
       const sx    = cx + dist * Math.cos(angle);
       const sy    = cy + dist * Math.sin(angle);
 
       if (sx >= 0 && sx <= p.width && sy >= 0 && sy <= p.height) {
+        // Per-drop phase offsets for distortion variety
+        const ph0 = rand.uniform(0, 2 * Math.PI);
+        const ph1 = rand.uniform(0, 2 * Math.PI);
+
         for (let j = 1; j <= p.secRings; j++) {
-          svgEl.appendChild(svgEl_('circle', {
-            cx: sx + ox, cy: sy + oy,
-            r: j * p.secSpacing,
-            fill: 'none', stroke: 'black', 'stroke-width': '0.5',
-          }));
+          const baseR   = j * p.secSpacing;
+          const distAmp = p.secDistortion * (1 + p.secDistGrowth * (j - 1));
+
+          if (distAmp <= 0) {
+            // Perfect concentric circles (default)
+            svgEl.appendChild(svgEl_('circle', {
+              cx: sx + ox, cy: sy + oy,
+              r: baseR,
+              fill: 'none', stroke: 'black', 'stroke-width': '0.5',
+            }));
+          } else {
+            // Distorted rings — polygon with superimposed sine waves
+            const nPts = Math.max(32, Math.floor(p.ringPoints * 0.35));
+            const pts  = [];
+            for (let k = 0; k < nPts; k++) {
+              const theta = 2 * Math.PI * k / nPts;
+              let r = baseR;
+              r += distAmp       * Math.sin(p.secDistFreq       * theta + ph0);
+              r += distAmp * 0.4 * Math.sin(p.secDistFreq * 2.1 * theta + ph1);
+              pts.push(`${(sx + r * Math.cos(theta) + ox).toFixed(2)},${(sy + r * Math.sin(theta) + oy).toFixed(2)}`);
+            }
+            svgEl.appendChild(svgEl_('polygon', {
+              points: pts.join(' '), fill: 'none', stroke: 'black', 'stroke-width': '0.5',
+            }));
+          }
         }
       }
     }

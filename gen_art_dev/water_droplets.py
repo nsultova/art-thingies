@@ -5,8 +5,7 @@ Models the visual pattern of multiple drops hitting a still water surface:
   • Concentric ripple rings with exponential spacing (inner rings tighter)
   • Fluid distortion via superimposed sine waves on each ring
   • Wave interference between drops (sinusoidal cross-drop perturbation)
-  • Splash rays radiating from each impact point
-  • Secondary micro-droplets scattered around impacts
+  • Secondary micro-droplets scattered around impacts (circles or distorted rings)
   • Fully parametric – adjust everything below or via constructor kwargs
 
 Usage:
@@ -51,18 +50,15 @@ class WaterDroplets(BaseGenerator):
     interference_strength : amplitude of cross-drop wave perturbation (mm)
     interference_wavelength_factor : wavelength as a multiple of ring_spacing
 
-    # Splash
-    splash_rays         : number of radial spray lines per drop
-    ray_length          : max length of splash rays (mm)
-    ray_jitter          : angular noise on ray direction (radians)
-    ray_inner_gap       : gap from center before ray starts (fraction of ring_spacing)
-
     # Secondary droplets
-    secondary_drops     : micro-splashes per drop
-    secondary_rings     : concentric rings on each micro-splash
+    secondary_drops        : micro-splashes per drop
+    secondary_rings        : rings per micro-splash
     secondary_ring_spacing : spacing between secondary rings (mm)
-    secondary_dist_min  : min distance from center (fraction of ring_spacing)
-    secondary_dist_max  : max distance from center (fraction of ray_length)
+    secondary_dist_min     : min scatter distance (fraction of ring_spacing)
+    secondary_dist_max     : scatter radius scale (added to ring_spacing*2, multiplied by 8)
+    secondary_distortion   : ring wobble amplitude; 0 = perfect concentric circles
+    secondary_dist_freq    : angular frequency of secondary ring distortion
+    secondary_dist_growth  : how distortion amplitude grows per ring index
 
     # Impact center
     impact_rings        : tight rings drawn right at the impact point
@@ -95,18 +91,15 @@ class WaterDroplets(BaseGenerator):
         interference_strength: float = 0.65,
         interference_wavelength_factor: float = 2.4,
 
-        # Splash
-        splash_rays: int = 8,
-        ray_length: float = 8.0,
-        ray_jitter: float = 0.30,
-        ray_inner_gap: float = 0.25,
-
         # Secondary droplets
         secondary_drops: int = 5,
         secondary_rings: int = 3,
         secondary_ring_spacing: float = 0.9,
         secondary_dist_min: float = 0.7,
         secondary_dist_max: float = 1.4,
+        secondary_distortion: float = 0.0,
+        secondary_dist_freq: int = 5,
+        secondary_dist_growth: float = 0.1,
 
         # Impact center
         impact_rings: int = 3,
@@ -132,16 +125,14 @@ class WaterDroplets(BaseGenerator):
         self.interference_strength = interference_strength
         self.interference_wavelength_factor = interference_wavelength_factor
 
-        self.splash_rays = splash_rays
-        self.ray_length = ray_length
-        self.ray_jitter = ray_jitter
-        self.ray_inner_gap = ray_inner_gap
-
         self.secondary_drops = secondary_drops
         self.secondary_rings = secondary_rings
         self.secondary_ring_spacing = secondary_ring_spacing
         self.secondary_dist_min = secondary_dist_min
         self.secondary_dist_max = secondary_dist_max
+        self.secondary_distortion = secondary_distortion
+        self.secondary_dist_freq = secondary_dist_freq
+        self.secondary_dist_growth = secondary_dist_growth
 
         self.impact_rings = impact_rings
         self.impact_ring_spacing = impact_ring_spacing
@@ -165,9 +156,6 @@ class WaterDroplets(BaseGenerator):
         for drop in drops:
             cx, cy = drop["x"], drop["y"]
             n_rings = max(2, int(self.max_rings * drop["age"]))
-
-            # Splash rays (drawn first — visual depth ordering)
-            self._draw_splash_rays(cx, cy)
 
             # Ripple rings, innermost to outermost
             for ring_idx in range(n_rings):
@@ -227,25 +215,6 @@ class WaterDroplets(BaseGenerator):
 
         self.builder.add_polygon(points)
 
-    # ── Splash elements ───────────────────────────────────────────────────────
-
-    def _draw_splash_rays(self, cx: float, cy: float) -> None:
-        """Radial spray lines emanating from impact point."""
-        base_angle = random.uniform(0, 2 * math.pi)
-        inner_r = self.ring_spacing * self.ray_inner_gap
-
-        for i in range(self.splash_rays):
-            angle = base_angle + i * (2 * math.pi / self.splash_rays)
-            angle += random.gauss(0, self.ray_jitter)        # angular jitter
-            length = self.ray_length * random.uniform(0.4, 1.0)  # length variation
-
-            x1 = cx + inner_r * math.cos(angle)
-            y1 = cy + inner_r * math.sin(angle)
-            x2 = cx + (inner_r + length) * math.cos(angle)
-            y2 = cy + (inner_r + length) * math.sin(angle)
-
-            self.builder.add_line(x1, y1, x2, y2)
-
     def _draw_impact_center(self, cx: float, cy: float) -> None:
         """Tight concentric rings right at the impact point (crown splash)."""
         gap = self.ring_spacing * self.impact_ring_spacing
@@ -258,15 +227,36 @@ class WaterDroplets(BaseGenerator):
             angle = random.uniform(0, 2 * math.pi)
             dist = random.uniform(
                 self.ring_spacing * self.secondary_dist_min,
-                self.ray_length * self.secondary_dist_max,
+                self.ring_spacing * 2 + self.secondary_dist_max * 8,
             )
             sx = cx + dist * math.cos(angle)
             sy = cy + dist * math.sin(angle)
 
-            # Only render if within canvas
-            if 0 <= sx <= self.width and 0 <= sy <= self.height:
-                for j in range(1, self.secondary_rings + 1):
-                    self.builder.add_circle(sx, sy, j * self.secondary_ring_spacing)
+            if not (0 <= sx <= self.width and 0 <= sy <= self.height):
+                continue
+
+            # Per-drop random phase offsets give each micro-drop unique wobble
+            ph0 = random.uniform(0, 2 * math.pi)
+            ph1 = random.uniform(0, 2 * math.pi)
+
+            for j in range(1, self.secondary_rings + 1):
+                base_r   = j * self.secondary_ring_spacing
+                dist_amp = self.secondary_distortion * (1 + self.secondary_dist_growth * (j - 1))
+
+                if dist_amp <= 0:
+                    # Default: perfect concentric circles
+                    self.builder.add_circle(sx, sy, base_r)
+                else:
+                    # Distorted ring — polygon with superimposed sine waves
+                    n_pts  = max(32, int(self.ring_points * 0.35))
+                    points = []
+                    for k in range(n_pts):
+                        theta = 2 * math.pi * k / n_pts
+                        r = base_r
+                        r += dist_amp       * math.sin(self.secondary_dist_freq       * theta + ph0)
+                        r += dist_amp * 0.4 * math.sin(self.secondary_dist_freq * 2.1 * theta + ph1)
+                        points.append((sx + r * math.cos(theta), sy + r * math.sin(theta)))
+                    self.builder.add_polygon(points)
 
     # ─────────────────────────────────────────────────────────────────────────
 
@@ -308,14 +298,14 @@ if __name__ == "__main__":
             distortion_growth=0.05,         # how wobble grows ring-to-ring
             interference_strength=0.65,     # mm – strength of cross-drop wave bending
             interference_wavelength_factor=2.4,
-            splash_rays=8,                  # radial spatter lines per drop
-            ray_length=8.0,                 # mm – max splash ray length
-            ray_jitter=0.30,               # radians – angular noise on rays
             secondary_drops=5,              # micro-splashes per impact
             secondary_rings=3,              # rings on each micro-splash
-            secondary_ring_spacing=0.9,    # mm – secondary ring spacing
+            secondary_ring_spacing=0.9,     # mm – secondary ring spacing
+            secondary_distortion=0.0,       # 0 = perfect circles; >0 = wobbly rings
+            secondary_dist_freq=5,          # lobe count for distorted secondary rings
+            secondary_dist_growth=0.1,      # distortion grows per ring index
             impact_rings=3,                 # tiny rings right at impact center
-            ring_points=200,               # polygon smoothness (higher = smoother)
+            ring_points=200,                # polygon smoothness (higher = smoother)
         )
 
         art.render()
