@@ -54,6 +54,7 @@
     .layout {
       display: flex;
       flex: 1;
+      min-height: 0;
       overflow: hidden;
     }
 
@@ -74,7 +75,6 @@
     .group {
       border: 1px solid var(--border);
       border-radius: 5px;
-      overflow: hidden;
     }
 
     .group-header {
@@ -91,13 +91,17 @@
       align-items: center;
       user-select: none;
       transition: color 0.15s;
+      border-radius: 4px 4px 0 0;
     }
 
     .group-header:hover { color: var(--text); }
 
-    .caret { display: inline-block; transition: transform 0.18s; }
+    /* collapsed: round all corners on the header since there's no body */
+    .group.collapsed .group-header { border-radius: 4px; }
     .group.collapsed .caret { transform: rotate(-90deg); }
     .group.collapsed .group-body { display: none; }
+
+    .caret { display: inline-block; transition: transform 0.18s; }
 
     .group-body {
       padding: 8px;
@@ -108,6 +112,7 @@
       max-height: 260px;
       scrollbar-width: thin;
       scrollbar-color: var(--border) transparent;
+      border-radius: 0 0 4px 4px;
     }
 
     /* ── Individual parameter ───────────────────────────────────────── */
