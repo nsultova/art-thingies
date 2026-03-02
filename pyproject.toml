@@ -11,5 +11,6 @@ dependencies = [
     "matplotlib>=3.10.6",
     "numpy>=2.3.2",
     "opensimplex>=0.4.5.1",
+    "svgwrite>=1.4.3",
     "vsketch>=1.2.0",
 ]
