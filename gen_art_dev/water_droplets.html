@@ -1,0 +1,644 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Water Droplets — Generative Art</title>
+  <style>
+    :root {
+      --bg:         #0c0c0c;
+      --surface:    #161616;
+      --surface2:   #202020;
+      --border:     #2e2e2e;
+      --text:       #c8c8c8;
+      --text-dim:   #555;
+      --accent:     #5ecec6;
+      --accent-dim: #1d4d4a;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'SF Mono', 'Cascadia Code', 'Fira Code', monospace;
+      background: var(--bg);
+      color: var(--text);
+      height: 100dvh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* ── Header ─────────────────────────────────────────────────────── */
+    header {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 10px 18px;
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+
+    header h1 {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--accent);
+      letter-spacing: 0.06em;
+    }
+
+    header .subtitle {
+      font-size: 11px;
+      color: var(--text-dim);
+    }
+
+    /* ── Layout ─────────────────────────────────────────────────────── */
+    .layout {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+    }
+
+    /* ── Controls sidebar ───────────────────────────────────────────── */
+    .controls {
+      width: 272px;
+      flex-shrink: 0;
+      overflow-y: auto;
+      border-right: 1px solid var(--border);
+      padding: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      scrollbar-width: thin;
+      scrollbar-color: var(--border) transparent;
+    }
+
+    .group {
+      border: 1px solid var(--border);
+      border-radius: 5px;
+      overflow: hidden;
+    }
+
+    .group-header {
+      padding: 5px 10px;
+      background: var(--surface2);
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--text-dim);
+      cursor: pointer;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      user-select: none;
+      transition: color 0.15s;
+    }
+
+    .group-header:hover { color: var(--text); }
+
+    .caret { display: inline-block; transition: transform 0.18s; }
+    .group.collapsed .caret { transform: rotate(-90deg); }
+    .group.collapsed .group-body { display: none; }
+
+    .group-body {
+      padding: 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 9px;
+    }
+
+    /* ── Individual parameter ───────────────────────────────────────── */
+    .param { display: flex; flex-direction: column; gap: 3px; }
+
+    .param-label {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      font-size: 11px;
+    }
+
+    .param-name { color: var(--text); }
+
+    .param-value {
+      color: var(--accent);
+      font-size: 10px;
+      min-width: 36px;
+      text-align: right;
+    }
+
+    /* Range slider */
+    input[type="range"] {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 100%;
+      height: 2px;
+      background: var(--border);
+      border-radius: 1px;
+      outline: none;
+      cursor: pointer;
+    }
+
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 11px;
+      height: 11px;
+      border-radius: 50%;
+      background: var(--accent);
+      cursor: pointer;
+      transition: background 0.15s, transform 0.1s;
+    }
+
+    input[type="range"]::-webkit-slider-thumb:hover {
+      background: #fff;
+      transform: scale(1.2);
+    }
+
+    input[type="range"]::-moz-range-thumb {
+      width: 11px;
+      height: 11px;
+      border: none;
+      border-radius: 50%;
+      background: var(--accent);
+      cursor: pointer;
+    }
+
+    /* ── Preview area ───────────────────────────────────────────────── */
+    .preview {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      background: var(--bg);
+    }
+
+    .svg-wrapper {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      overflow: hidden;
+    }
+
+    #canvas {
+      background: #fff;
+      border-radius: 2px;
+      box-shadow: 0 4px 48px rgba(0, 0, 0, 0.75);
+      display: block;
+      flex-shrink: 0; /* JS controls the size; don't let flexbox squeeze it */
+    }
+
+    /* ── Toolbar ────────────────────────────────────────────────────── */
+    .toolbar {
+      border-top: 1px solid var(--border);
+      padding: 9px 16px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-shrink: 0;
+      flex-wrap: wrap;
+    }
+
+    .seed-label {
+      font-size: 11px;
+      color: var(--text-dim);
+    }
+
+    #seed-input {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      color: var(--text);
+      font-family: inherit;
+      font-size: 12px;
+      padding: 4px 8px;
+      border-radius: 4px;
+      width: 90px;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+
+    #seed-input:focus { border-color: var(--accent); }
+
+    button {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      color: var(--text);
+      font-family: inherit;
+      font-size: 11px;
+      padding: 5px 12px;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: border-color 0.15s, color 0.15s, background 0.15s;
+      white-space: nowrap;
+    }
+
+    button:hover { border-color: var(--accent); color: var(--accent); }
+
+    #download-btn {
+      background: var(--accent-dim);
+      border-color: var(--accent);
+      color: var(--accent);
+      margin-left: auto;
+    }
+
+    #download-btn:hover { background: var(--accent); color: #000; }
+
+    .render-time {
+      font-size: 10px;
+      color: var(--text-dim);
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>Water Droplets</h1>
+  <span class="subtitle">generative plotter art</span>
+</header>
+
+<div class="layout">
+
+  <!-- ── Controls ─────────────────────────────────────────────────── -->
+  <aside class="controls" id="controls"></aside>
+
+  <!-- ── Preview ──────────────────────────────────────────────────── -->
+  <main class="preview">
+    <div class="svg-wrapper">
+      <svg id="canvas" xmlns="http://www.w3.org/2000/svg"></svg>
+    </div>
+
+    <div class="toolbar">
+      <span class="seed-label">seed</span>
+      <input type="number" id="seed-input" value="42" min="0" max="99999999">
+      <button id="randomize-btn">⚡ randomize</button>
+      <button id="rerender-btn">↺ re-render</button>
+      <span class="render-time" id="render-time"></span>
+      <button id="download-btn">↓ save SVG</button>
+    </div>
+  </main>
+</div>
+
+<script>
+// ── Seeded PRNG (mulberry32) ─────────────────────────────────────────────────
+function makePRNG(seed) {
+  let s = seed >>> 0;
+  const rand = () => {
+    s = (s + 0x6D2B79F5) >>> 0;
+    let t = Math.imul(s ^ (s >>> 15), 1 | s);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 0x100000000;
+  };
+  rand.uniform = (a, b) => a + rand() * (b - a);
+  // Box-Muller normal sample
+  rand.gauss = () => {
+    const u = Math.max(rand(), 1e-12);
+    return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * rand());
+  };
+  return rand;
+}
+
+// ── Parameter schema ─────────────────────────────────────────────────────────
+const SCHEMA = [
+  {
+    group: 'Canvas',
+    items: [
+      { id: 'width',  label: 'Width (mm)',  min: 60,  max: 420, step: 5,    def: 210 },
+      { id: 'height', label: 'Height (mm)', min: 60,  max: 594, step: 5,    def: 297 },
+    ],
+  },
+  {
+    group: 'Drops',
+    items: [
+      { id: 'numDrops', label: 'Number of drops', min: 1,  max: 14,  step: 1, def: 4  },
+      { id: 'maxRings', label: 'Max rings / drop', min: 2,  max: 22,  step: 1, def: 11 },
+    ],
+  },
+  {
+    group: 'Ring Geometry',
+    items: [
+      { id: 'ringSpacing',       label: 'Inner spacing (mm)', min: 1.0, max: 12,  step: 0.25, def: 4.0  },
+      { id: 'ringSpacingGrowth', label: 'Spacing growth',     min: 1.0, max: 1.5, step: 0.01, def: 1.11 },
+    ],
+  },
+  {
+    group: 'Distortion',
+    items: [
+      { id: 'distortion',       label: 'Amplitude (mm)',    min: 0,   max: 7,    step: 0.1,  def: 1.4  },
+      { id: 'distFreq0',        label: 'Frequency 1',       min: 1,   max: 20,   step: 1,    def: 3    },
+      { id: 'distFreq1',        label: 'Frequency 2',       min: 1,   max: 20,   step: 1,    def: 7    },
+      { id: 'distFreq2',        label: 'Frequency 3',       min: 1,   max: 20,   step: 1,    def: 13   },
+      { id: 'distortionGrowth', label: 'Growth / ring',     min: 0,   max: 0.4,  step: 0.01, def: 0.05 },
+    ],
+  },
+  {
+    group: 'Wave Interference',
+    items: [
+      { id: 'interferenceStr',   label: 'Strength (mm)',    min: 0,   max: 4,   step: 0.05, def: 0.65 },
+      { id: 'interferenceWave',  label: 'Wavelength ×',     min: 0.5, max: 8,   step: 0.1,  def: 2.4  },
+    ],
+  },
+  {
+    group: 'Splash',
+    items: [
+      { id: 'splashRays',  label: 'Ray count',  min: 0,  max: 24,  step: 1,    def: 8    },
+      { id: 'rayLength',   label: 'Length (mm)',min: 0,  max: 30,  step: 0.5,  def: 8.0  },
+      { id: 'rayJitter',   label: 'Jitter',     min: 0,  max: 1.2, step: 0.05, def: 0.30 },
+      { id: 'rayInnerGap', label: 'Inner gap',  min: 0,  max: 1.5, step: 0.05, def: 0.25 },
+    ],
+  },
+  {
+    group: 'Secondary Drops',
+    items: [
+      { id: 'secDrops',   label: 'Count',        min: 0,   max: 14,  step: 1,   def: 5   },
+      { id: 'secRings',   label: 'Rings each',   min: 1,   max: 6,   step: 1,   def: 3   },
+      { id: 'secSpacing', label: 'Spacing (mm)', min: 0.2, max: 4,   step: 0.1, def: 0.9 },
+      { id: 'secRadius',  label: 'Scatter',      min: 0.5, max: 3,   step: 0.1, def: 1.4 },
+    ],
+  },
+  {
+    group: 'Impact Center',
+    items: [
+      { id: 'impactRings',   label: 'Ring count', min: 0,    max: 8,   step: 1,    def: 3    },
+      { id: 'impactSpacing', label: 'Spacing',    min: 0.05, max: 0.7, step: 0.01, def: 0.22 },
+    ],
+  },
+  {
+    group: 'Rendering',
+    items: [
+      { id: 'ringPoints', label: 'Ring resolution', min: 40, max: 400, step: 20, def: 200 },
+    ],
+  },
+];
+
+// ── State ────────────────────────────────────────────────────────────────────
+const state = {};
+SCHEMA.forEach(g => g.items.forEach(p => { state[p.id] = p.def; }));
+
+// ── Build controls ───────────────────────────────────────────────────────────
+const controlsEl = document.getElementById('controls');
+
+SCHEMA.forEach(({ group, items }) => {
+  const groupEl = document.createElement('div');
+  groupEl.className = 'group';
+
+  const hdr = document.createElement('div');
+  hdr.className = 'group-header';
+  hdr.innerHTML = `${group} <span class="caret">▾</span>`;
+  hdr.addEventListener('click', () => groupEl.classList.toggle('collapsed'));
+
+  const body = document.createElement('div');
+  body.className = 'group-body';
+
+  items.forEach(param => {
+    const wrap = document.createElement('div');
+    wrap.className = 'param';
+
+    const row = document.createElement('div');
+    row.className = 'param-label';
+
+    const nameEl = document.createElement('span');
+    nameEl.className = 'param-name';
+    nameEl.textContent = param.label;
+
+    const valEl = document.createElement('span');
+    valEl.className = 'param-value';
+    valEl.id = `val-${param.id}`;
+    valEl.textContent = formatVal(param.def, param.step);
+
+    row.append(nameEl, valEl);
+
+    const slider = document.createElement('input');
+    slider.type = 'range';
+    slider.min = param.min;
+    slider.max = param.max;
+    slider.step = param.step;
+    slider.value = param.def;
+
+    slider.addEventListener('input', () => {
+      const v = parseFloat(slider.value);
+      state[param.id] = v;
+      valEl.textContent = formatVal(v, param.step);
+      scheduleRender();
+    });
+
+    wrap.append(row, slider);
+    body.append(wrap);
+  });
+
+  groupEl.append(hdr, body);
+  controlsEl.append(groupEl);
+});
+
+function formatVal(v, step) {
+  if (step >= 1) return String(Math.round(v));
+  const decimals = String(step).split('.')[1]?.length ?? 2;
+  return v.toFixed(Math.min(decimals, 3));
+}
+
+// ── SVG helpers ──────────────────────────────────────────────────────────────
+const NS = 'http://www.w3.org/2000/svg';
+const svgEl = document.getElementById('canvas');
+
+function svgEl_(tag, attrs) {
+  const e = document.createElementNS(NS, tag);
+  for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v);
+  return e;
+}
+
+// ── Core render ──────────────────────────────────────────────────────────────
+function render() {
+  const t0 = performance.now();
+  const p = state;
+  const seed = Math.max(0, parseInt(document.getElementById('seed-input').value) || 0);
+
+  const rand = makePRNG(seed);
+
+  const margin = 2;
+  const vw = p.width  + 2 * margin;
+  const vh = p.height + 2 * margin;
+  const ox = margin, oy = margin;
+
+  svgEl.setAttribute('viewBox', `0 0 ${vw} ${vh}`);
+
+  // Clear canvas
+  while (svgEl.firstChild) svgEl.removeChild(svgEl.lastChild);
+
+  const freqs = [p.distFreq0, p.distFreq1, p.distFreq2];
+
+  // ── Build drop list ──────────────────────────────────────────────
+  const drops = [];
+  for (let i = 0; i < p.numDrops; i++) {
+    drops.push({
+      x:      rand.uniform(p.width  * 0.15, p.width  * 0.85),
+      y:      rand.uniform(p.height * 0.15, p.height * 0.85),
+      age:    rand.uniform(0.4, 1.0),
+      phases: freqs.map(() => rand.uniform(0, 2 * Math.PI)),
+    });
+  }
+
+  // ── Draw each drop ───────────────────────────────────────────────
+  for (const drop of drops) {
+    const { x: cx, y: cy, age, phases } = drop;
+    const nRings     = Math.max(2, Math.floor(p.maxRings * age));
+    const wavelength = p.ringSpacing * p.interferenceWave;
+
+    // Splash rays ──────────────────────────────────────────────────
+    const baseAngle = rand.uniform(0, 2 * Math.PI);
+    const innerR    = p.ringSpacing * p.rayInnerGap;
+
+    for (let i = 0; i < p.splashRays; i++) {
+      const angle  = baseAngle + i * (2 * Math.PI / p.splashRays) + rand.gauss() * p.rayJitter;
+      const rayLen = p.rayLength * rand.uniform(0.4, 1.0);
+
+      svgEl.appendChild(svgEl_('line', {
+        x1: cx + innerR          * Math.cos(angle) + ox,
+        y1: cy + innerR          * Math.sin(angle) + oy,
+        x2: cx + (innerR+rayLen) * Math.cos(angle) + ox,
+        y2: cy + (innerR+rayLen) * Math.sin(angle) + oy,
+        stroke: 'black', 'stroke-width': '0.5', fill: 'none',
+      }));
+    }
+
+    // Ripple rings ─────────────────────────────────────────────────
+    for (let ri = 0; ri < nRings; ri++) {
+      const baseR   = p.ringSpacing * Math.pow(p.ringSpacingGrowth, ri);
+      const distAmp = p.distortion  * (1 + p.distortionGrowth * ri);
+      const nf      = freqs.length;
+      const pts     = [];
+
+      for (let i = 0; i < p.ringPoints; i++) {
+        const theta = 2 * Math.PI * i / p.ringPoints;
+        let r = baseR;
+
+        // Fluid distortion — superimposed sine waves
+        for (let fi = 0; fi < nf; fi++) {
+          r += (distAmp / nf) * Math.sin(freqs[fi] * theta + phases[fi]);
+        }
+
+        // Wave interference from other drops
+        const px0 = cx + baseR * Math.cos(theta);
+        const py0 = cy + baseR * Math.sin(theta);
+        for (const other of drops) {
+          if (other === drop) continue;
+          const dx = px0 - other.x, dy = py0 - other.y;
+          r += p.interferenceStr * Math.cos(2 * Math.PI * Math.sqrt(dx*dx + dy*dy) / wavelength);
+        }
+
+        pts.push(`${(cx + r * Math.cos(theta) + ox).toFixed(2)},${(cy + r * Math.sin(theta) + oy).toFixed(2)}`);
+      }
+
+      svgEl.appendChild(svgEl_('polygon', {
+        points: pts.join(' '), fill: 'none', stroke: 'black', 'stroke-width': '0.5',
+      }));
+    }
+
+    // Impact crown ─────────────────────────────────────────────────
+    for (let i = 1; i <= p.impactRings; i++) {
+      svgEl.appendChild(svgEl_('circle', {
+        cx: cx + ox, cy: cy + oy,
+        r: i * p.ringSpacing * p.impactSpacing,
+        fill: 'none', stroke: 'black', 'stroke-width': '0.5',
+      }));
+    }
+
+    // Secondary micro-drops ────────────────────────────────────────
+    for (let i = 0; i < p.secDrops; i++) {
+      const angle = rand.uniform(0, 2 * Math.PI);
+      const dist  = rand.uniform(p.ringSpacing * 0.7, p.rayLength * p.secRadius);
+      const sx    = cx + dist * Math.cos(angle);
+      const sy    = cy + dist * Math.sin(angle);
+
+      if (sx >= 0 && sx <= p.width && sy >= 0 && sy <= p.height) {
+        for (let j = 1; j <= p.secRings; j++) {
+          svgEl.appendChild(svgEl_('circle', {
+            cx: sx + ox, cy: sy + oy,
+            r: j * p.secSpacing,
+            fill: 'none', stroke: 'black', 'stroke-width': '0.5',
+          }));
+        }
+      }
+    }
+  }
+
+  fitSvg();
+
+  document.getElementById('render-time').textContent =
+    `${(performance.now() - t0).toFixed(1)} ms`;
+}
+
+// ── Fit SVG to fill the available preview area ───────────────────────────────
+const wrapper = document.querySelector('.svg-wrapper');
+
+function fitSvg() {
+  const vbAttr = svgEl.getAttribute('viewBox');
+  if (!vbAttr) return;
+  const [, , vw, vh] = vbAttr.split(' ').map(Number);
+
+  const pad    = 24;
+  const availW = wrapper.clientWidth  - pad * 2;
+  const availH = wrapper.clientHeight - pad * 2;
+  const aspect = vw / vh;
+
+  let displayW, displayH;
+  if (availW / availH > aspect) {
+    displayH = availH;
+    displayW = availH * aspect;
+  } else {
+    displayW = availW;
+    displayH = availW / aspect;
+  }
+
+  svgEl.style.width  = `${Math.floor(displayW)}px`;
+  svgEl.style.height = `${Math.floor(displayH)}px`;
+}
+
+new ResizeObserver(fitSvg).observe(wrapper);
+
+// Debounced re-render on slider change
+let timer = null;
+function scheduleRender() {
+  clearTimeout(timer);
+  timer = setTimeout(render, 55);
+}
+
+// ── Toolbar controls ─────────────────────────────────────────────────────────
+document.getElementById('randomize-btn').addEventListener('click', () => {
+  document.getElementById('seed-input').value = Math.floor(Math.random() * 9_999_999);
+  render();
+});
+
+document.getElementById('rerender-btn').addEventListener('click', render);
+
+document.getElementById('seed-input').addEventListener('change', render);
+document.getElementById('seed-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter') render();
+});
+
+document.getElementById('download-btn').addEventListener('click', () => {
+  const seed   = document.getElementById('seed-input').value;
+  const clone  = svgEl.cloneNode(true);
+  // Set physical dimensions so the SVG file carries correct mm sizing
+  clone.setAttribute('width',  `${state.width  + 4}mm`);
+  clone.setAttribute('height', `${state.height + 4}mm`);
+  const bg     = document.createElementNS(NS, 'rect');
+  bg.setAttribute('width', '100%');
+  bg.setAttribute('height', '100%');
+  bg.setAttribute('fill', 'white');
+  clone.insertBefore(bg, clone.firstChild);
+  clone.setAttribute('xmlns', NS);
+
+  const blob = new Blob(
+    [`<?xml version="1.0" encoding="UTF-8"?>\n<!-- Water Droplets | seed=${seed} -->\n`, clone.outerHTML],
+    { type: 'image/svg+xml' },
+  );
+  const a    = document.createElement('a');
+  a.href     = URL.createObjectURL(blob);
+  a.download = `water-droplets-s${seed}.svg`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+});
+
+// Initial render
+render();
+</script>
+</body>
+</html>
