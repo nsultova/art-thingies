@@ -59,23 +59,23 @@ class GlassDroplets(BaseGenerator):
         slide_fraction: float = 0.25,   # 0 = all static beads, 1 = all sliding
 
         # ── Physics (sliding drops) ──────────────────────────────────────
-        drop_length: float = 45.0,      # max trail length in mm
-        heaviness: float = 5.0,         # drop size multiplier
+        drop_length: float = 60.0,      # max trail length in mm
+        heaviness: float = 8.0,         # drop size multiplier (bigger = larger drops)
         viscosity: float = 0.30,        # 0 = water (fast/elongated), 1 = syrup (slow/round)
         randomness: float = 0.15,       # surface-irregularity jitter on path
         stick_slip: float = 0.25,       # 0 = smooth glide, 1 = jerky stick-slip motion
 
         # ── Rings ────────────────────────────────────────────────────────
-        ring_count: int = 5,            # concentric rings per drop
+        ring_count: int = 6,            # concentric rings per drop
         ring_warp: float = 0.40,        # sine-wave warp amplitude
         distortion: float = 0.20,       # fine noise on top of warp
 
         # ── Secondary droplets ───────────────────────────────────────────
         sec_count: int = 12,            # beads left along the trail
         sec_rings: int = 1,             # rings per secondary drop (1 = single circle)
-        sec_scatter: float = 1.0,       # perpendicular scatter (0 = on trail)
+        sec_scatter: float = 1.2,       # perpendicular scatter (0 = on trail)
         sec_randomness: float = 0.30,   # 0 = evenly spaced, 1 = fully random
-        sec_size: float = 0.50,         # size scale relative to parent drop
+        sec_size: float = 0.65,         # size scale relative to parent drop
 
         # ── Fractal satellites ───────────────────────────────────────────
         fractal_depth: int = 1,
@@ -198,7 +198,7 @@ class GlassDroplets(BaseGenerator):
             n_pts  = max(24, int(72 * t))
 
             phases   = [rng.uniform(0, 2.0 * math.pi) for _ in WARP_FREQS]
-            warp_amp = self.ring_warp * ring_r * 0.10
+            warp_amp = self.ring_warp * ring_r * 0.25   # A4-scale: ~25% of radius at warp=1
 
             pts = []
             for j in range(n_pts):
@@ -210,7 +210,7 @@ class GlassDroplets(BaseGenerator):
                     warp_amp * math.sin(f * theta + p)
                     for f, p in zip(WARP_FREQS, phases)
                 )
-                warp_r += rng.gauss(0, self.distortion * ring_r * 0.04)
+                warp_r += rng.gauss(0, self.distortion * ring_r * 0.10)  # A4-scale noise
                 r_eff = ring_r + warp_r
 
                 v_shaped = (v * (1.0 + abs(v) * (max_elong - 1.0))
@@ -372,11 +372,11 @@ if __name__ == "__main__":
         art  = GlassDroplets(
             width=210, height=297, seed=seed,
             num_drops=50,        slide_fraction=0.25,
-            drop_length=45.0,    heaviness=5.0,
+            drop_length=60.0,    heaviness=8.0,
             viscosity=0.30,      randomness=0.15,  stick_slip=0.25,
-            ring_count=5,        ring_warp=0.40,   distortion=0.20,
-            sec_count=12,        sec_rings=1,      sec_scatter=1.0,
-            sec_randomness=0.30, sec_size=0.50,
+            ring_count=6,        ring_warp=0.40,   distortion=0.20,
+            sec_count=12,        sec_rings=1,      sec_scatter=1.2,
+            sec_randomness=0.30, sec_size=0.65,
             fractal_depth=1,
         )
         art.render()
