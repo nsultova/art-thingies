@@ -186,6 +186,16 @@
       justify-content: center;
       padding: 24px;
       overflow: hidden;
+      cursor: grab;
+      user-select: none;
+    }
+
+    .svg-wrapper.dragging { cursor: grabbing; }
+
+    #zoom-layer {
+      /* transform applied by JS; origin stays at element center (=wrapper center) */
+      transform-origin: center center;
+      flex-shrink: 0;
     }
 
     #canvas {
@@ -194,6 +204,33 @@
       box-shadow: 0 4px 48px rgba(0, 0, 0, 0.75);
       display: block;
       flex-shrink: 0; /* JS controls the size; don't let flexbox squeeze it */
+    }
+
+    /* ── Canvas preset buttons ──────────────────────────────────────── */
+    .preset-row {
+      display: flex;
+      gap: 5px;
+      margin-bottom: 2px;
+    }
+
+    .preset-btn {
+      flex: 1;
+      padding: 4px 6px;
+      font-size: 11px;
+      min-width: 0;
+    }
+
+    .preset-btn.active {
+      border-color: var(--accent);
+      color: var(--accent);
+      background: var(--accent-dim);
+    }
+
+    /* ── Zoom indicator ─────────────────────────────────────────────── */
+    #zoom-label {
+      font-size: 11px;
+      color: var(--text-dim);
+      min-width: 38px;
     }
 
     /* ── Toolbar ────────────────────────────────────────────────────── */
@@ -271,8 +308,10 @@
 
   <!-- ── Preview ──────────────────────────────────────────────────── -->
   <main class="preview">
-    <div class="svg-wrapper">
-      <svg id="canvas" xmlns="http://www.w3.org/2000/svg"></svg>
+    <div class="svg-wrapper" id="svg-wrapper">
+      <div id="zoom-layer">
+        <svg id="canvas" xmlns="http://www.w3.org/2000/svg"></svg>
+      </div>
     </div>
 
     <div class="toolbar">
@@ -281,6 +320,8 @@
       <button id="randomize-btn">⚡ randomize</button>
       <button id="rerender-btn">↺ re-render</button>
       <span class="render-time" id="render-time"></span>
+      <button id="zoom-reset-btn">⊙ reset zoom</button>
+      <span id="zoom-label">100%</span>
       <button id="download-btn">↓ save SVG</button>
     </div>
   </main>
@@ -309,6 +350,11 @@ function makePRNG(seed) {
 const SCHEMA = [
   {
     group: 'Canvas',
+    presets: [
+      { label: 'A4',     w: 210, h: 297 },
+      { label: 'A3',     w: 297, h: 420 },
+      { label: 'Square', w: 200, h: 200 },
+    ],
     items: [
       { id: 'width',  label: 'Width (mm)',  min: 60,  max: 420, step: 5,    def: 210 },
       { id: 'height', label: 'Height (mm)', min: 60,  max: 594, step: 5,    def: 297 },
@@ -378,8 +424,11 @@ SCHEMA.forEach(g => g.items.forEach(p => { state[p.id] = p.def; }));
 
 // ── Build controls ───────────────────────────────────────────────────────────
 const controlsEl = document.getElementById('controls');
+const sliders = {};   // param id → <input type=range>
+const valEls  = {};   // param id → <span> showing current value
+let   presetBtns = []; // canvas preset buttons for active-highlighting
 
-SCHEMA.forEach(({ group, items }) => {
+SCHEMA.forEach(({ group, items, presets }) => {
   const groupEl = document.createElement('div');
   groupEl.className = 'group';
 
@@ -390,6 +439,34 @@ SCHEMA.forEach(({ group, items }) => {
 
   const body = document.createElement('div');
   body.className = 'group-body';
+
+  // Canvas size presets row
+  if (presets) {
+    const row = document.createElement('div');
+    row.className = 'preset-row';
+
+    presets.forEach(({ label, w, h }) => {
+      const btn = document.createElement('button');
+      btn.className = 'preset-btn';
+      btn.textContent = label;
+      presetBtns.push({ btn, w, h });
+
+      btn.addEventListener('click', () => {
+        state.width  = w;
+        state.height = h;
+        sliders.width.value  = w;
+        sliders.height.value = h;
+        valEls.width.textContent  = String(w);
+        valEls.height.textContent = String(h);
+        updateActivePreset();
+        render();
+      });
+
+      row.appendChild(btn);
+    });
+
+    body.appendChild(row);
+  }
 
   items.forEach(param => {
     const wrap = document.createElement('div');
@@ -406,6 +483,7 @@ SCHEMA.forEach(({ group, items }) => {
     valEl.className = 'param-value';
     valEl.id = `val-${param.id}`;
     valEl.textContent = formatVal(param.def, param.step);
+    valEls[param.id] = valEl;
 
     row.append(nameEl, valEl);
 
@@ -415,11 +493,13 @@ SCHEMA.forEach(({ group, items }) => {
     slider.max = param.max;
     slider.step = param.step;
     slider.value = param.def;
+    sliders[param.id] = slider;
 
     slider.addEventListener('input', () => {
       const v = parseFloat(slider.value);
       state[param.id] = v;
       valEl.textContent = formatVal(v, param.step);
+      if (param.id === 'width' || param.id === 'height') updateActivePreset();
       scheduleRender();
     });
 
@@ -430,6 +510,13 @@ SCHEMA.forEach(({ group, items }) => {
   groupEl.append(hdr, body);
   controlsEl.append(groupEl);
 });
+
+function updateActivePreset() {
+  presetBtns.forEach(({ btn, w, h }) => {
+    btn.classList.toggle('active', state.width === w && state.height === h);
+  });
+}
+updateActivePreset(); // mark A4 active on load
 
 function formatVal(v, step) {
   if (step >= 1) return String(Math.round(v));
@@ -646,6 +733,75 @@ document.getElementById('download-btn').addEventListener('click', () => {
   a.click();
   URL.revokeObjectURL(a.href);
 });
+
+// ── Zoom & pan ───────────────────────────────────────────────────────────────
+const svgWrapper = document.getElementById('svg-wrapper');
+const zoomLayer  = document.getElementById('zoom-layer');
+const zoomLabel  = document.getElementById('zoom-label');
+
+let zoom = 1;
+let pan  = { x: 0, y: 0 };
+
+function applyTransform() {
+  zoomLayer.style.transform = `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`;
+  zoomLabel.textContent = `${Math.round(zoom * 100)}%`;
+}
+
+function resetZoom() {
+  zoom = 1;
+  pan  = { x: 0, y: 0 };
+  applyTransform();
+}
+
+// Wheel: zoom toward cursor
+svgWrapper.addEventListener('wheel', e => {
+  e.preventDefault();
+  const rect   = svgWrapper.getBoundingClientRect();
+  // Mouse relative to wrapper centre (where zoom-layer is anchored)
+  const mx = e.clientX - rect.left - rect.width  / 2;
+  const my = e.clientY - rect.top  - rect.height / 2;
+
+  const factor  = e.deltaY < 0 ? 1.12 : 1 / 1.12;
+  const newZoom = Math.max(0.1, Math.min(12, zoom * factor));
+
+  // Adjust pan so the point under the cursor stays fixed
+  pan.x = mx - (mx - pan.x) * (newZoom / zoom);
+  pan.y = my - (my - pan.y) * (newZoom / zoom);
+  zoom  = newZoom;
+  applyTransform();
+}, { passive: false });
+
+// Drag to pan
+let dragging  = false;
+let dragStart = { x: 0, y: 0 };
+let panStart  = { x: 0, y: 0 };
+
+svgWrapper.addEventListener('mousedown', e => {
+  if (e.button !== 0) return;
+  e.preventDefault();
+  dragging  = true;
+  dragStart = { x: e.clientX, y: e.clientY };
+  panStart  = { ...pan };
+  svgWrapper.classList.add('dragging');
+});
+
+window.addEventListener('mousemove', e => {
+  if (!dragging) return;
+  pan.x = panStart.x + e.clientX - dragStart.x;
+  pan.y = panStart.y + e.clientY - dragStart.y;
+  applyTransform();
+});
+
+window.addEventListener('mouseup', () => {
+  if (!dragging) return;
+  dragging = false;
+  svgWrapper.classList.remove('dragging');
+});
+
+// Double-click to reset
+svgWrapper.addEventListener('dblclick', resetZoom);
+
+document.getElementById('zoom-reset-btn').addEventListener('click', resetZoom);
 
 // Initial render
 render();
