@@ -12,15 +12,25 @@ Two populations:
 Ring system
 -----------
 Rings use smooth sine-wave harmonics for organic warp (2, 3, 5 cycles/ring)
-instead of per-point Gaussian noise.  This avoids the spiky "rose" look and
-gives smooth, blob-like shapes.  Distortion adds a small amount of high-frequency
-texture on top.
+instead of per-point Gaussian noise.  This gives smooth blob shapes.
+Distortion adds a small amount of high-frequency texture on top.
 
-Wind
-----
-A single global wind direction (wind_angle degrees from vertical) affects ALL
-sliding drops the same way (with ±25 % per-drop magnitude variation).
-Positive wind_angle = rightward drift.
+Fluid dynamics
+--------------
+  Stick-slip  — real drops on glass don't slide smoothly: surface contact-angle
+                hysteresis pins the drop until enough energy builds up, then it
+                lurches forward.  The stick_slip param (0–1) controls how often
+                this happens and how severe the velocity resets are.
+  Capillary   — surface irregularities cause subtle lateral drift even without
+                wind.  Controlled by the randomness param.
+
+Secondary droplets
+------------------
+  Sliding drops leave a trail of small bead-drops behind them (Rayleigh-Plateau
+  capillary breakup of the thin film).  sec_count controls how many; sec_rings
+  controls their ring structure (1 = single circle dot, N = concentric rings);
+  sec_scatter controls perpendicular spread; sec_randomness blends from evenly
+  spaced (0) to fully random positions (1) along the trail.
 
 Usage
 -----
@@ -50,19 +60,25 @@ class GlassDroplets(BaseGenerator):
 
         # ── Physics (sliding drops) ──────────────────────────────────────
         drop_length: float = 45.0,      # max trail length in mm
-        wind_angle: float = 5.0,        # degrees from vertical (+ = right)
-        wind_strength: float = 0.25,    # lateral drift intensity
         heaviness: float = 5.0,         # drop size multiplier
         viscosity: float = 0.30,        # 0 = water (fast/elongated), 1 = syrup (slow/round)
-        randomness: float = 0.15,       # path jitter (low = smooth glassy path)
+        randomness: float = 0.15,       # surface-irregularity jitter on path
+        stick_slip: float = 0.25,       # 0 = smooth glide, 1 = jerky stick-slip motion
 
         # ── Rings ────────────────────────────────────────────────────────
         ring_count: int = 5,            # concentric rings per drop
         ring_warp: float = 0.40,        # sine-wave warp amplitude
         distortion: float = 0.20,       # fine noise on top of warp
 
-        # ── Satellites ──────────────────────────────────────────────────
-        fractal_depth: int = 1,         # generations of satellite drops (0 = none)
+        # ── Secondary droplets ───────────────────────────────────────────
+        sec_count: int = 12,            # beads left along the trail
+        sec_rings: int = 1,             # rings per secondary drop (1 = single circle)
+        sec_scatter: float = 1.0,       # perpendicular scatter (0 = on trail)
+        sec_randomness: float = 0.30,   # 0 = evenly spaced, 1 = fully random
+        sec_size: float = 0.50,         # size scale relative to parent drop
+
+        # ── Fractal satellites ───────────────────────────────────────────
+        fractal_depth: int = 1,
 
         **kwargs,
     ):
@@ -72,33 +88,52 @@ class GlassDroplets(BaseGenerator):
         self.slide_fraction = float(slide_fraction)
 
         self.drop_length    = drop_length
-        self.wind_angle     = wind_angle
-        self.wind_strength  = wind_strength
         self.heaviness      = heaviness
         self.viscosity      = viscosity
         self.randomness     = randomness
+        self.stick_slip     = stick_slip
 
         self.ring_count     = int(ring_count)
         self.ring_warp      = ring_warp
         self.distortion     = distortion
+
+        self.sec_count      = int(sec_count)
+        self.sec_rings      = int(max(1, sec_rings))
+        self.sec_scatter    = sec_scatter
+        self.sec_randomness = sec_randomness
+        self.sec_size       = sec_size
+
         self.fractal_depth  = int(fractal_depth)
 
     # ── Physics ────────────────────────────────────────────────────────────────
 
-    def _sim_path(self, x0: float, y0: float, wind_vx: float) -> list:
-        """Euler-integrate a drop sliding down the glass."""
+    def _sim_path(self, x0: float, y0: float) -> list:
+        """
+        Euler-integrate a drop sliding down the glass.
+
+        No external wind — lateral drift comes from surface irregularities
+        (randomness param).  Stick-slip events (stick_slip param) momentarily
+        pin the drop and reset velocity, producing the characteristic
+        stuttering / lurch pattern seen on real glass.
+        """
         path = [(x0, y0)]
-        x, y = x0, y0
-        vx        = wind_vx
-        vy        = 0.05
-        dt        = 0.5
+        x, y  = x0, y0
+        vx    = 0.0
+        vy    = 0.05
+        dt    = 0.5
         max_steps = int(self.drop_length * 2.5 / dt)
         gravity   = 0.08 * (self.heaviness / 5.0)
         drag      = 0.85 + self.viscosity * 0.12
 
         for _ in range(max_steps):
+            # Stick-slip: contact-angle hysteresis pins drop, then releases
+            if self.stick_slip > 0 and random.random() < self.stick_slip * 0.04:
+                vx *= 0.05
+                vy *= 0.05
+
             vy += gravity * dt
-            vx += wind_vx * 0.008 * dt + random.gauss(0, self.randomness * 0.10) * dt
+            # Surface irregularities → subtle lateral jitter
+            vx += random.gauss(0, self.randomness * 0.10) * dt
             vy += random.gauss(0, self.randomness * 0.015) * dt
             vx *= drag
             vy *= drag
@@ -118,7 +153,7 @@ class GlassDroplets(BaseGenerator):
         return path
 
     def _smooth_path(self, path: list, iterations: int = 3) -> list:
-        """Laplacian smooth — removes high-frequency jitter for a glassy look."""
+        """Laplacian smooth — removes high-frequency jitter."""
         p = list(path)
         for _ in range(iterations):
             s = [p[0]]
@@ -143,28 +178,9 @@ class GlassDroplets(BaseGenerator):
         n_rings: int = None,
     ) -> None:
         """
-        Draw n_rings concentric rings centred at (cx, cy).
-
-        Warp model
-        ----------
-        Each ring's radius is modulated by a sum of low-frequency sine harmonics
-        (frequencies 2, 3, 5 cycles/ring) with random per-ring phases.
-        This gives smooth, organic blob shapes instead of spiky jagged ones.
-        A tiny amount of Gaussian noise (distortion param) adds fine texture.
-
-        Teardrop shaping
-        ----------------
-        v < 0 (trailing edge): elongated proportional to speed × (1 − viscosity)
-        v > 0 (leading edge):  slightly rounded/compressed
-        At speed = 0 (static beads): rings are pure circles + smooth warp.
-
-        Coordinate frame
-        ----------------
-        local u  = perpendicular to motion
-        local v  = along motion (+ = leading/forward, − = trailing/behind)
-        Rotate to world via:
-          wx = cx + lx*(−sinA) + ly*cosA
-          wy = cy + lx* cosA   + ly*sinA
+        Concentric rings with smooth sine-wave warp + teardrop elongation.
+        speed = 0  →  pure circles + warp (static beads / secondary drops)
+        speed > 0  →  teardrop: trailing edge elongated
         """
         if n_rings is None:
             n_rings = self.ring_count
@@ -172,7 +188,6 @@ class GlassDroplets(BaseGenerator):
         rng   = random.Random(rng_seed)
         cos_a = math.cos(motion_angle)
         sin_a = math.sin(motion_angle)
-
         max_elong = 1.0 + speed * max(0.0, 1.5 - self.viscosity * 1.2)
 
         WARP_FREQS = (2, 3, 5)
@@ -180,11 +195,10 @@ class GlassDroplets(BaseGenerator):
         for ri in range(n_rings):
             t      = (ri + 1) / n_rings
             ring_r = r * t
-            n_pts  = max(24, int(72 * t))       # smooth polygon
+            n_pts  = max(24, int(72 * t))
 
-            # Per-ring random phases (deterministic via rng_seed)
             phases   = [rng.uniform(0, 2.0 * math.pi) for _ in WARP_FREQS]
-            warp_amp = self.ring_warp * ring_r * 0.10   # per-harmonic amplitude
+            warp_amp = self.ring_warp * ring_r * 0.10
 
             pts = []
             for j in range(n_pts):
@@ -192,25 +206,18 @@ class GlassDroplets(BaseGenerator):
                 u = math.cos(theta)
                 v = math.sin(theta)
 
-                # Smooth sine-wave warp (low-freq harmonics → smooth bumps)
                 warp_r = sum(
                     warp_amp * math.sin(f * theta + p)
                     for f, p in zip(WARP_FREQS, phases)
                 )
-                # Tiny Gaussian noise for fine texture
                 warp_r += rng.gauss(0, self.distortion * ring_r * 0.04)
-
                 r_eff = ring_r + warp_r
 
-                # Teardrop elongation along the motion axis
-                if v < 0:
-                    v_shaped = v * (1.0 + abs(v) * (max_elong - 1.0))
-                else:
-                    v_shaped = v * (1.0 - v * 0.05)
+                v_shaped = (v * (1.0 + abs(v) * (max_elong - 1.0))
+                            if v < 0 else v * (1.0 - v * 0.05))
 
                 lx = r_eff * u
                 ly = r_eff * v_shaped
-
                 wx = cx + lx * (-sin_a) + ly * cos_a
                 wy = cy + lx *  cos_a   + ly * sin_a
                 pts.append((wx, wy))
@@ -221,24 +228,57 @@ class GlassDroplets(BaseGenerator):
     # ── Trail ──────────────────────────────────────────────────────────────────
 
     def _draw_trail(self, path: list) -> None:
-        """Single clean spine — thin line above the drop head."""
-        if len(path) < 2:
-            return
-        self.builder.add_polyline(path, width='0.3px')
+        if len(path) >= 2:
+            self.builder.add_polyline(path, width='0.3px')
 
-    # ── Satellites ─────────────────────────────────────────────────────────────
+    # ── Secondary droplets ─────────────────────────────────────────────────────
+
+    def _draw_secondary_droplets(self, path: list, base_r: float) -> None:
+        """
+        Scatter small bead drops along/near the trail.
+
+        sec_rings = 1  →  each bead is a single circle (the baseline)
+        sec_rings > 1  →  each bead becomes concentric rings
+        sec_scatter    →  perpendicular spread from the trail line
+        sec_randomness →  0 = evenly spaced along trail, 1 = fully random
+        """
+        if self.sec_count <= 0 or not path:
+            return
+
+        for i in range(self.sec_count):
+            # Blend between evenly-spaced (t_even) and fully random (rand)
+            t_even = (i + 0.5) / self.sec_count
+            t      = t_even * (1.0 - self.sec_randomness) + random.random() * self.sec_randomness
+            t      = max(0.0, min(0.999, t))
+
+            idx    = int(t * (len(path) - 1))
+            px, py = path[min(idx, len(path) - 1)]
+
+            # Perpendicular direction at this point on the path
+            if idx + 1 < len(path):
+                dx, dy = path[idx+1][0] - px, path[idx+1][1] - py
+                l      = math.sqrt(dx * dx + dy * dy) or 1.0
+                perp_x, perp_y = -dy / l, dx / l
+            else:
+                perp_x, perp_y = 1.0, 0.0
+
+            scatter = random.gauss(0, self.sec_scatter * base_r * 0.8)
+            sx = px + perp_x * scatter
+            sy = py + perp_y * scatter
+
+            sec_r = max(0.15, base_r * self.sec_size * random.uniform(0.10, 0.30))
+            self._draw_rings(sx, sy, sec_r, math.pi / 2, 0.0,
+                             random.randint(0, 99_999), self.sec_rings)
+
+    # ── Fractal satellites ─────────────────────────────────────────────────────
 
     def _draw_satellites(self, path: list, parent_r: float, depth: int) -> None:
-        """Scatter smaller static-bead drops along the trail (fractal recursion)."""
         if depth <= 0 or not path:
             return
-
         n_sats = random.randint(1, max(1, self.fractal_depth + 1))
-
         for _ in range(n_sats):
             idx    = random.randint(0, max(0, len(path) - 3))
             px, py = path[idx]
-
             if idx + 1 < len(path):
                 dx, dy = path[idx+1][0] - px, path[idx+1][1] - py
                 l      = math.sqrt(dx * dx + dy * dy) or 1.0
@@ -249,7 +289,6 @@ class GlassDroplets(BaseGenerator):
             sat_r = parent_r * random.uniform(0.15, 0.45) / depth
             if sat_r < 0.2:
                 continue
-
             side     = 1 if random.random() > 0.5 else -1
             offset_d = parent_r * random.uniform(0.8, 2.5)
             sx = px + perp_x * offset_d * side + random.gauss(0, sat_r * 0.3)
@@ -258,7 +297,6 @@ class GlassDroplets(BaseGenerator):
             sat_rings = max(2, self.ring_count - (self.fractal_depth - depth + 1))
             self._draw_rings(sx, sy, sat_r, math.pi / 2, 0.0,
                              random.randint(0, 99_999), sat_rings)
-
             if depth > 1 and random.random() < 0.4:
                 self._draw_satellites([(sx, sy)], sat_r, depth - 1)
 
@@ -267,19 +305,13 @@ class GlassDroplets(BaseGenerator):
     def generate(self) -> None:
         W, H = self.width, self.height
 
-        # Global wind vector — same direction for every sliding drop
-        wind_rad     = math.radians(self.wind_angle)
-        base_wind_vx = math.sin(wind_rad) * self.wind_strength * 2.0
-
         for drop_i in range(self.num_drops):
             is_sliding = random.random() < self.slide_fraction
+            rng_seed   = drop_i * 997 + self.seed % 10_000
 
-            # Size distribution:
-            #   static beads  → exponential (many tiny, few large)
-            #   sliding drops → lognormal shifted slightly larger
             if is_sliding:
-                r = max(1.0, math.exp(random.gauss(0.4, 0.45)) * self.heaviness / 5.0)
-                r = min(r, self.heaviness)
+                r  = max(1.0, math.exp(random.gauss(0.4, 0.45)) * self.heaviness / 5.0)
+                r  = min(r, self.heaviness)
                 x0 = random.uniform(W * 0.05, W * 0.95)
                 y0 = random.uniform(H * 0.03, H * 0.55)
             else:
@@ -289,20 +321,16 @@ class GlassDroplets(BaseGenerator):
                 x0   = random.uniform(W * 0.03, W * 0.97)
                 y0   = random.uniform(H * 0.03, H * 0.97)
 
-            rng_seed = drop_i * 997 + self.seed % 10_000
-
             if is_sliding:
-                wind_vx = base_wind_vx * random.uniform(0.75, 1.25)
-                path    = self._sim_path(x0, y0, wind_vx)
+                path = self._sim_path(x0, y0)
                 if len(path) < 4:
                     continue
                 path = self._smooth_path(path, iterations=4)
 
-                # Trail stops 2 points before the head (avoids overlap with rings)
                 trail_path = path[:-2] if len(path) > 4 else path
                 self._draw_trail(trail_path)
+                self._draw_secondary_droplets(trail_path, r)
 
-                # Head orientation from velocity
                 hx, hy     = path[-1]
                 look_back  = min(5, len(path) - 1)
                 px, py     = path[-1 - look_back]
@@ -315,7 +343,6 @@ class GlassDroplets(BaseGenerator):
                 if self.fractal_depth > 0:
                     self._draw_satellites(trail_path, r, self.fractal_depth)
             else:
-                # Static bead: speed = 0 → circular rings with warp only
                 self._draw_rings(x0, y0, r, math.pi / 2, 0.0, rng_seed)
 
     def describe(self) -> str:
@@ -323,7 +350,7 @@ class GlassDroplets(BaseGenerator):
         return (
             f"Glass Droplets — {self.num_drops} drops "
             f"({n_slide} sliding, {self.num_drops - n_slide} static), "
-            f"viscosity={self.viscosity:.2f}"
+            f"viscosity={self.viscosity:.2f}, stick_slip={self.stick_slip:.2f}"
         )
 
 
@@ -344,17 +371,12 @@ if __name__ == "__main__":
         seed = int(arg)
         art  = GlassDroplets(
             width=210, height=297, seed=seed,
-            num_drops=50,
-            slide_fraction=0.25,
-            drop_length=45.0,
-            wind_angle=5.0,
-            wind_strength=0.25,
-            heaviness=5.0,
-            viscosity=0.30,
-            randomness=0.15,
-            ring_count=5,
-            ring_warp=0.40,
-            distortion=0.20,
+            num_drops=50,        slide_fraction=0.25,
+            drop_length=45.0,    heaviness=5.0,
+            viscosity=0.30,      randomness=0.15,  stick_slip=0.25,
+            ring_count=5,        ring_warp=0.40,   distortion=0.20,
+            sec_count=12,        sec_rings=1,      sec_scatter=1.0,
+            sec_randomness=0.30, sec_size=0.50,
             fractal_depth=1,
         )
         art.render()

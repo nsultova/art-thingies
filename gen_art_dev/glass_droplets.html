@@ -214,12 +214,11 @@ const SCHEMA = [
   {
     group: 'Physics',
     items: [
-      { id: 'dropLength',   label: 'Trail length (mm)', min: 5,   max: 180, step: 5,    def: 45   },
-      { id: 'windAngle',    label: 'Wind angle (°)',    min: -45, max: 45,  step: 1,    def: 5    },
-      { id: 'windStrength', label: 'Wind strength',     min: 0,   max: 1,   step: 0.05, def: 0.25 },
-      { id: 'heaviness',    label: 'Heaviness',         min: 0.5, max: 15,  step: 0.5,  def: 5.0  },
-      { id: 'viscosity',    label: 'Viscosity',         min: 0,   max: 1,   step: 0.05, def: 0.30 },
-      { id: 'randomness',   label: 'Randomness',        min: 0,   max: 1,   step: 0.05, def: 0.15 },
+      { id: 'dropLength',  label: 'Trail length (mm)', min: 5,   max: 180, step: 5,    def: 45   },
+      { id: 'heaviness',   label: 'Heaviness',         min: 0.5, max: 15,  step: 0.5,  def: 5.0  },
+      { id: 'viscosity',   label: 'Viscosity',         min: 0,   max: 1,   step: 0.05, def: 0.30 },
+      { id: 'randomness',  label: 'Surface irregularity', min: 0, max: 1,  step: 0.05, def: 0.15 },
+      { id: 'stickSlip',   label: 'Stick-slip',        min: 0,   max: 1,   step: 0.05, def: 0.25 },
     ],
   },
   {
@@ -228,6 +227,16 @@ const SCHEMA = [
       { id: 'ringCount',  label: 'Ring count',  min: 1, max: 20, step: 1,    def: 5    },
       { id: 'ringWarp',   label: 'Ring warp',   min: 0, max: 3,  step: 0.05, def: 0.40 },
       { id: 'distortion', label: 'Distortion',  min: 0, max: 3,  step: 0.05, def: 0.20 },
+    ],
+  },
+  {
+    group: 'Secondary Droplets',
+    items: [
+      { id: 'secCount',      label: 'Count',            min: 0,   max: 60,  step: 1,    def: 12   },
+      { id: 'secRings',      label: 'Rings per drop',   min: 1,   max: 8,   step: 1,    def: 1    },
+      { id: 'secScatter',    label: 'Scatter',          min: 0,   max: 4,   step: 0.1,  def: 1.0  },
+      { id: 'secRandomness', label: 'Randomness',       min: 0,   max: 1,   step: 0.05, def: 0.30 },
+      { id: 'secSize',       label: 'Size',             min: 0.1, max: 2,   step: 0.1,  def: 0.50 },
     ],
   },
   {
@@ -349,17 +358,25 @@ function render() {
   }
 
   // ── Path simulation ────────────────────────────────────────────────────────
-  function simPath(x0, y0, windVx) {
+  // No external wind — lateral drift from surface irregularities (randomness).
+  // Stick-slip: contact-angle hysteresis occasionally pins the drop and resets
+  // velocity, producing the characteristic lurch pattern on real glass.
+  function simPath(x0, y0) {
     const path = [[x0, y0]];
-    let x = x0, y = y0, vx = windVx, vy = 0.05;
+    let x = x0, y = y0, vx = 0.0, vy = 0.05;
     const dt       = 0.5;
     const maxSteps = Math.floor(p.dropLength * 2.5 / dt);
     const gravity  = 0.08 * (p.heaviness / 5.0);
     const drag     = 0.85 + p.viscosity * 0.12;
 
     for (let i = 0; i < maxSteps; i++) {
+      // Stick-slip event: drop pins to glass, velocity collapses
+      if (p.stickSlip > 0 && rand() < p.stickSlip * 0.04) {
+        vx *= 0.05;
+        vy *= 0.05;
+      }
       vy += gravity * dt;
-      vx += windVx * 0.008 * dt + rand.gauss() * p.randomness * 0.10 * dt;
+      vx += rand.gauss() * p.randomness * 0.10 * dt;
       vy += rand.gauss() * p.randomness * 0.015 * dt;
       vx *= drag; vy *= drag;
       const spd    = Math.sqrt(vx * vx + vy * vy);
@@ -453,6 +470,43 @@ function render() {
     if (path.length >= 2) addPolyline(path, 0.30);
   }
 
+  // ── Secondary droplets ─────────────────────────────────────────────────────
+  // Small bead drops scattered along/near the sliding trail.
+  // secRings = 1 → single circle per dot (baseline)
+  // secRings > 1 → each dot becomes concentric rings
+  // secRandomness = 0 → evenly spaced along trail
+  // secRandomness = 1 → fully random positions
+  function drawSecondaryDroplets(path, baseR) {
+    const n      = Math.round(p.secCount);
+    const nRings = Math.round(p.secRings);
+    if (n <= 0 || path.length < 2) return;
+
+    for (let i = 0; i < n; i++) {
+      // Blend evenly-spaced with random along-trail position
+      const tEven = (i + 0.5) / n;
+      const t     = tEven * (1.0 - p.secRandomness) + rand() * p.secRandomness;
+      const idx   = Math.min(Math.floor(Math.max(0, Math.min(0.999, t)) * (path.length - 1)),
+                             path.length - 1);
+      const [px, py] = path[idx];
+
+      // Perpendicular direction at this trail point
+      let perpX = 1, perpY = 0;
+      if (idx + 1 < path.length) {
+        const dx = path[idx + 1][0] - px, dy = path[idx + 1][1] - py;
+        const l  = Math.sqrt(dx * dx + dy * dy) || 1;
+        perpX = -dy / l; perpY = dx / l;
+      }
+
+      const scatter = rand.gauss() * p.secScatter * baseR * 0.8;
+      const sx = px + perpX * scatter;
+      const sy = py + perpY * scatter;
+
+      const secR   = Math.max(0.15, baseR * p.secSize * rand.uniform(0.10, 0.30));
+      const secSeed = Math.floor(rand() * 99999);
+      drawRings(sx, sy, secR, Math.PI / 2, 0.0, secSeed, nRings);
+    }
+  }
+
   // ── Satellites ─────────────────────────────────────────────────────────────
   function drawSatellites(path, parentR, depth) {
     if (depth <= 0 || path.length === 0) return;
@@ -491,10 +545,6 @@ function render() {
   const nRings       = Math.round(p.ringCount);
   const fractalDepth = Math.round(p.fractalDepth);
 
-  // Single global wind direction (all drops share it)
-  const windRad     = p.windAngle * Math.PI / 180;
-  const baseWindVx  = Math.sin(windRad) * p.windStrength * 2.0;
-
   for (let di = 0; di < nDrops; di++) {
     const isSliding = rand() < p.slideFraction;
     const rngSeed   = di * 997 + seed % 10000;
@@ -502,13 +552,11 @@ function render() {
     let r, x0, y0;
 
     if (isSliding) {
-      // Sliding drops: lognormal, shifted larger, start upper 55%
       r  = Math.max(1.0, Math.exp(rand.gauss() * 0.45 + 0.4) * p.heaviness / 5.0);
       r  = Math.min(r, p.heaviness);
       x0 = rand.uniform(W * 0.05, W * 0.95);
       y0 = rand.uniform(H * 0.03, H * 0.55);
     } else {
-      // Static beads: exponential distribution (many tiny, few large), whole canvas
       const rate = 2.5 / Math.max(0.1, p.heaviness);
       r  = Math.max(0.3, rand.expo(rate));
       r  = Math.min(r, p.heaviness * 0.6);
@@ -517,13 +565,13 @@ function render() {
     }
 
     if (isSliding) {
-      const windVx = baseWindVx * rand.uniform(0.75, 1.25);
-      let path = simPath(x0, y0, windVx);
+      let path = simPath(x0, y0);
       if (path.length < 4) continue;
       path = smoothPath(path, 4);
 
       const trailPath = path.length > 4 ? path.slice(0, -2) : path;
       drawTrail(trailPath);
+      drawSecondaryDroplets(trailPath, r);
 
       const head     = path[path.length - 1];
       const lookBack = Math.min(5, path.length - 1);
@@ -536,7 +584,6 @@ function render() {
       if (fractalDepth > 0) drawSatellites(trailPath, r, fractalDepth);
 
     } else {
-      // Static bead: speed = 0 → circular rings + smooth warp only
       drawRings(x0, y0, r, Math.PI / 2, 0.0, rngSeed, nRings);
     }
   }
