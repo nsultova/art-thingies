@@ -225,8 +225,8 @@ const SCHEMA = [
     group: 'Rings',
     items: [
       { id: 'ringCount',  label: 'Ring count',  min: 1, max: 20, step: 1,   def: 6    },
-      { id: 'ringWarp',   label: 'Ring warp',   min: 0, max: 2,  step: 0.1, def: 0.40 },
-      { id: 'distortion', label: 'Distortion',  min: 0, max: 2,  step: 0.1, def: 0.20 },
+      { id: 'ringWarp',   label: 'Ring warp',   min: 0, max: 2,  step: 0.1, def: 0    },
+      { id: 'distortion', label: 'Distortion',  min: 0, max: 2,  step: 0.1, def: 0    },
     ],
   },
   {
@@ -234,7 +234,7 @@ const SCHEMA = [
     items: [
       { id: 'secCount',      label: 'Count',            min: 0,   max: 60,  step: 1,   def: 12   },
       { id: 'secRings',      label: 'Rings per drop',   min: 1,   max: 8,   step: 1,   def: 1    },
-      { id: 'secScatter',    label: 'Scatter',          min: 0,   max: 6,   step: 0.2, def: 1.2  },
+      { id: 'secScatter',    label: 'Scatter',          min: 0,   max: 6,   step: 0.2, def: 0.5  },
       { id: 'secRandomness', label: 'Randomness',       min: 0,   max: 1,   step: 0.1, def: 0.30 },
       { id: 'secSize',       label: 'Size',             min: 0.1, max: 3,   step: 0.1, def: 0.65 },
     ],
@@ -415,7 +415,8 @@ function render() {
   // Teardrop: v < 0 (trailing edge) is elongated proportional to speed.
   //           At speed = 0 (static beads) → pure circles + smooth warp.
   //
-  const WARP_FREQS = [2, 3, 5];
+  const FREQS_COARSE = [2, 3, 5];    // ring_warp: large organic bumps
+  const FREQS_FINE   = [6, 9, 13];   // distortion: finer ripple, still smooth
 
   function drawRings(cx, cy, r, motionAngle, speed, rngSeed, nRings) {
     const rng  = makePRNG(rngSeed);
@@ -428,8 +429,10 @@ function render() {
       const ringR  = r * t;
       const nPts   = Math.max(24, Math.floor(72 * t));
 
-      const warpAmp = p.ringWarp * ringR * 0.25;   // A4-scale: ~25% of radius at warp=1
-      const phases  = WARP_FREQS.map(() => rng.uniform(0, 2 * Math.PI));
+      const ampC    = p.ringWarp   * ringR * 0.25;
+      const ampF    = p.distortion * ringR * 0.10;
+      const phasesC = FREQS_COARSE.map(() => rng.uniform(0, 2 * Math.PI));
+      const phasesF = FREQS_FINE.map(()   => rng.uniform(0, 2 * Math.PI));
 
       const pts = [];
       for (let j = 0; j < nPts; j++) {
@@ -437,13 +440,11 @@ function render() {
         const u = Math.cos(theta);
         const v = Math.sin(theta);
 
-        // Smooth sine-wave warp on radius
         let warpR = 0;
-        for (let k = 0; k < WARP_FREQS.length; k++) {
-          warpR += warpAmp * Math.sin(WARP_FREQS[k] * theta + phases[k]);
-        }
-        // Gaussian noise for texture
-        warpR += rng.gauss() * p.distortion * ringR * 0.10;  // A4-scale noise
+        for (let k = 0; k < FREQS_COARSE.length; k++)
+          warpR += ampC * Math.sin(FREQS_COARSE[k] * theta + phasesC[k]);
+        for (let k = 0; k < FREQS_FINE.length; k++)
+          warpR += ampF * Math.sin(FREQS_FINE[k]   * theta + phasesF[k]);
 
         const rEff = ringR + warpR;
 

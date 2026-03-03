@@ -67,8 +67,8 @@ class GlassDroplets(BaseGenerator):
 
         # ── Rings ────────────────────────────────────────────────────────
         ring_count: int = 6,            # concentric rings per drop
-        ring_warp: float = 0.40,        # sine-wave warp amplitude
-        distortion: float = 0.20,       # fine noise on top of warp
+        ring_warp: float = 0.00,        # sine-wave warp amplitude (0 = perfect circles)
+        distortion: float = 0.00,       # fine sine-harmonic texture on top of warp (0 = off)
 
         # ── Secondary droplets ───────────────────────────────────────────
         sec_count: int = 12,            # beads left along the trail
@@ -190,15 +190,18 @@ class GlassDroplets(BaseGenerator):
         sin_a = math.sin(motion_angle)
         max_elong = 1.0 + speed * max(0.0, 1.5 - self.viscosity * 1.2)
 
-        WARP_FREQS = (2, 3, 5)
+        FREQS_COARSE = (2, 3, 5)       # ring_warp: large organic bumps
+        FREQS_FINE   = (6, 9, 13)      # distortion: finer ripple, still smooth
 
         for ri in range(n_rings):
             t      = (ri + 1) / n_rings
             ring_r = r * t
             n_pts  = max(24, int(72 * t))
 
-            phases   = [rng.uniform(0, 2.0 * math.pi) for _ in WARP_FREQS]
-            warp_amp = self.ring_warp * ring_r * 0.25   # A4-scale: ~25% of radius at warp=1
+            amp_c    = self.ring_warp  * ring_r * 0.25
+            amp_f    = self.distortion * ring_r * 0.10
+            phases_c = [rng.uniform(0, 2.0 * math.pi) for _ in FREQS_COARSE]
+            phases_f = [rng.uniform(0, 2.0 * math.pi) for _ in FREQS_FINE]
 
             pts = []
             for j in range(n_pts):
@@ -206,11 +209,10 @@ class GlassDroplets(BaseGenerator):
                 u = math.cos(theta)
                 v = math.sin(theta)
 
-                warp_r = sum(
-                    warp_amp * math.sin(f * theta + p)
-                    for f, p in zip(WARP_FREQS, phases)
+                warp_r = (
+                    sum(amp_c * math.sin(f * theta + p) for f, p in zip(FREQS_COARSE, phases_c))
+                  + sum(amp_f * math.sin(f * theta + p) for f, p in zip(FREQS_FINE,   phases_f))
                 )
-                warp_r += rng.gauss(0, self.distortion * ring_r * 0.10)  # A4-scale noise
                 r_eff = ring_r + warp_r
 
                 v_shaped = (v * (1.0 + abs(v) * (max_elong - 1.0))
@@ -374,7 +376,7 @@ if __name__ == "__main__":
             num_drops=50,        slide_fraction=0.25,
             drop_length=60.0,    heaviness=8.0,
             viscosity=0.30,      randomness=0.15,  stick_slip=0.25,
-            ring_count=6,        ring_warp=0.40,   distortion=0.20,
+            ring_count=6,        ring_warp=0.00,   distortion=0.00,
             sec_count=12,        sec_rings=1,      sec_scatter=1.2,
             sec_randomness=0.30, sec_size=0.65,
             fractal_depth=1,
