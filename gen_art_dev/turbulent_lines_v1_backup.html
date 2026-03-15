@@ -1,0 +1,531 @@
+<!DOCTYPE html>
+<!--
+  ╔══════════════════════════════════════════════════════════════╗
+  ║  TURBULENT LINES — chaos-to-order horizontal line field      ║
+  ╚══════════════════════════════════════════════════════════════╝
+-->
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Turbulent Lines — Generative Art</title>
+  <style>
+    :root {
+      --bg:         #0c0c0c;
+      --surface:    #161616;
+      --surface2:   #202020;
+      --border:     #2e2e2e;
+      --text:       #c8c8c8;
+      --text-dim:   #555;
+      --accent:     #5ecec6;
+      --accent-dim: #1d4d4a;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'SF Mono', 'Cascadia Code', 'Fira Code', monospace;
+      background: var(--bg);
+      color: var(--text);
+      height: 100dvh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    header {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 11px 18px;
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+
+    header h1 { font-size: 14px; font-weight: 600; color: var(--accent); letter-spacing: 0.06em; }
+    header .subtitle { font-size: 12px; color: var(--text-dim); }
+
+    .layout { display: flex; flex: 1; min-height: 0; overflow: hidden; }
+
+    .controls {
+      width: 295px; flex-shrink: 0; overflow-y: auto;
+      border-right: 1px solid var(--border); padding: 10px;
+      display: flex; flex-direction: column; gap: 6px;
+      scrollbar-width: thin; scrollbar-color: var(--border) transparent;
+    }
+
+    .group { border: 1px solid var(--border); border-radius: 5px; }
+
+    .group-header {
+      padding: 6px 10px; background: var(--surface2);
+      font-size: 11px; font-weight: 700; letter-spacing: 0.10em;
+      text-transform: uppercase; color: var(--text-dim); cursor: pointer;
+      display: flex; justify-content: space-between; align-items: center;
+      user-select: none; transition: color 0.15s; border-radius: 4px 4px 0 0;
+    }
+
+    .group-header:hover { color: var(--text); }
+    .group.collapsed .group-header { border-radius: 4px; }
+    .group.collapsed .caret { transform: rotate(-90deg); }
+    .group.collapsed .group-body { display: none; }
+    .caret { display: inline-block; transition: transform 0.18s; }
+
+    .group-body {
+      padding: 8px; display: flex; flex-direction: column; gap: 10px;
+      overflow-y: auto; max-height: 260px;
+      scrollbar-width: thin; scrollbar-color: var(--border) transparent;
+      border-radius: 0 0 4px 4px;
+    }
+
+    .param { display: flex; flex-direction: column; gap: 3px; }
+    .param-label { display: flex; justify-content: space-between; align-items: baseline; font-size: 12px; }
+    .param-name { color: var(--text); }
+    .param-value { color: var(--accent); font-size: 11px; min-width: 36px; text-align: right; }
+
+    input[type="range"] {
+      -webkit-appearance: none; appearance: none; width: 100%; height: 2px;
+      background: var(--border); border-radius: 1px; outline: none; cursor: pointer;
+    }
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none; width: 11px; height: 11px; border-radius: 50%;
+      background: var(--accent); cursor: pointer; transition: background 0.15s, transform 0.1s;
+    }
+    input[type="range"]::-webkit-slider-thumb:hover { background: #fff; transform: scale(1.2); }
+    input[type="range"]::-moz-range-thumb {
+      width: 11px; height: 11px; border: none; border-radius: 50%;
+      background: var(--accent); cursor: pointer;
+    }
+
+    .preview { flex: 1; display: flex; flex-direction: column; overflow: hidden; background: var(--bg); }
+
+    .svg-wrapper {
+      flex: 1; display: flex; align-items: center; justify-content: center;
+      padding: 24px; overflow: hidden; cursor: grab; user-select: none;
+    }
+    .svg-wrapper.dragging { cursor: grabbing; }
+
+    #zoom-layer { transform-origin: center center; flex-shrink: 0; }
+    #canvas {
+      background: #fff; border-radius: 2px;
+      box-shadow: 0 4px 48px rgba(0, 0, 0, 0.75); display: block; flex-shrink: 0;
+    }
+
+    .preset-row { display: flex; gap: 5px; margin-bottom: 2px; }
+    .preset-btn { flex: 1; padding: 4px 6px; font-size: 11px; min-width: 0; }
+    .preset-btn.active { border-color: var(--accent); color: var(--accent); background: var(--accent-dim); }
+
+    #zoom-label { font-size: 11px; color: var(--text-dim); min-width: 38px; }
+
+    .toolbar {
+      border-top: 1px solid var(--border); padding: 9px 16px;
+      display: flex; align-items: center; gap: 10px; flex-shrink: 0; flex-wrap: wrap;
+    }
+    .seed-label { font-size: 11px; color: var(--text-dim); }
+    #seed-input {
+      background: var(--surface2); border: 1px solid var(--border); color: var(--text);
+      font-family: inherit; font-size: 12px; padding: 5px 8px; border-radius: 4px;
+      width: 90px; outline: none; transition: border-color 0.15s;
+    }
+    #seed-input:focus { border-color: var(--accent); }
+
+    button {
+      background: var(--surface2); border: 1px solid var(--border); color: var(--text);
+      font-family: inherit; font-size: 12px; padding: 6px 14px; border-radius: 4px;
+      cursor: pointer; transition: border-color 0.15s, color 0.15s, background 0.15s;
+      white-space: nowrap;
+    }
+    button:hover { border-color: var(--accent); color: var(--accent); }
+    #download-btn {
+      background: var(--accent-dim); border-color: var(--accent); color: var(--accent); margin-left: auto;
+    }
+    #download-btn:hover { background: var(--accent); color: #000; }
+    .render-time { font-size: 10px; color: var(--text-dim); }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>TURBULENT LINES</h1>
+  <span class="subtitle">chaos-to-order horizontal line field</span>
+</header>
+
+<div class="layout">
+  <aside class="controls" id="controls"></aside>
+  <main class="preview">
+    <div class="svg-wrapper" id="svg-wrapper">
+      <div id="zoom-layer">
+        <svg id="canvas" xmlns="http://www.w3.org/2000/svg"></svg>
+      </div>
+    </div>
+    <div class="toolbar">
+      <span class="seed-label">seed</span>
+      <input type="number" id="seed-input" value="42" min="0" max="99999999">
+      <button id="randomize-btn">randomize</button>
+      <button id="rerender-btn">re-render</button>
+      <span class="render-time" id="render-time"></span>
+      <button id="zoom-reset-btn">reset zoom</button>
+      <span id="zoom-label">100%</span>
+      <button id="download-btn">save SVG</button>
+    </div>
+  </main>
+</div>
+
+<script>
+function makePRNG(seed) {
+  let s = seed >>> 0;
+  const rand = () => {
+    s = (s + 0x6D2B79F5) >>> 0;
+    let t = Math.imul(s ^ (s >>> 15), 1 | s);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 0x100000000;
+  };
+  rand.uniform = (a, b) => a + rand() * (b - a);
+  rand.gauss = () => {
+    const u = Math.max(rand(), 1e-12);
+    return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * rand());
+  };
+  return rand;
+}
+
+const ARTWORK_NAME = 'turbulent-lines';
+
+const SCHEMA = [
+  {
+    group: 'Canvas',
+    presets: [
+      { label: 'A4',     w: 210, h: 297 },
+      { label: 'A3',     w: 297, h: 420 },
+      { label: 'Square', w: 200, h: 200 },
+    ],
+    items: [
+      { id: 'width',  label: 'Width (mm)',  min: 60,  max: 420, step: 5, def: 200 },
+      { id: 'height', label: 'Height (mm)', min: 60,  max: 594, step: 5, def: 200 },
+    ],
+  },
+  {
+    group: 'Structure',
+    items: [
+      { id: 'numLines',    label: 'Line count',    min: 10, max: 80,  step: 1,   def: 45  },
+      { id: 'resolution',  label: 'Points / line', min: 80, max: 600, step: 10,  def: 300 },
+      { id: 'maxPasses',   label: 'Max passes',    min: 1,  max: 25,  step: 1,   def: 12  },
+    ],
+  },
+  {
+    group: 'Turbulence',
+    items: [
+      { id: 'maxAmplitude',  label: 'Max amplitude',   min: 2,   max: 40,  step: 0.5, def: 18  },
+      { id: 'maxFrequency',  label: 'Max frequency',   min: 0.02,max: 0.4, step: 0.01,def: 0.15},
+      { id: 'octaves',       label: 'Noise octaves',   min: 1,   max: 8,   step: 1,   def: 4   },
+      { id: 'chaosExponent', label: 'Chaos falloff',   min: 0.5, max: 5.0, step: 0.1, def: 2.2 },
+    ],
+  },
+  {
+    group: 'Gradient',
+    items: [
+      { id: 'hWeight', label: 'Horizontal weight', min: 0, max: 1, step: 0.05, def: 0.65 },
+      { id: 'vWeight', label: 'Vertical weight',   min: 0, max: 1, step: 0.05, def: 0.35 },
+    ],
+  },
+  {
+    group: 'Style',
+    items: [
+      { id: 'strokeWidth', label: 'Stroke width', min: 0.1, max: 1.0, step: 0.05, def: 0.35 },
+    ],
+  },
+];
+
+// ── Boilerplate: state, controls ─────────────────────────────────────
+const state = {};
+SCHEMA.forEach(g => g.items.forEach(p => { state[p.id] = p.def; }));
+
+const controlsEl = document.getElementById('controls');
+const sliders = {}, valEls = {};
+let presetBtns = [];
+
+SCHEMA.forEach(({ group, items, presets }) => {
+  const groupEl = document.createElement('div');
+  groupEl.className = 'group';
+  const hdr = document.createElement('div');
+  hdr.className = 'group-header';
+  hdr.innerHTML = `${group} <span class="caret">&#9662;</span>`;
+  hdr.addEventListener('click', () => groupEl.classList.toggle('collapsed'));
+  const body = document.createElement('div');
+  body.className = 'group-body';
+
+  if (presets) {
+    const row = document.createElement('div');
+    row.className = 'preset-row';
+    presets.forEach(({ label, w, h }) => {
+      const btn = document.createElement('button');
+      btn.className = 'preset-btn';
+      btn.textContent = label;
+      presetBtns.push({ btn, w, h });
+      btn.addEventListener('click', () => {
+        state.width = w; state.height = h;
+        sliders.width.value = w; sliders.height.value = h;
+        valEls.width.textContent = String(w);
+        valEls.height.textContent = String(h);
+        updateActivePreset(); render();
+      });
+      row.appendChild(btn);
+    });
+    body.appendChild(row);
+  }
+
+  items.forEach(param => {
+    const wrap = document.createElement('div');
+    wrap.className = 'param';
+    const row = document.createElement('div');
+    row.className = 'param-label';
+    const nameEl = document.createElement('span');
+    nameEl.className = 'param-name';
+    nameEl.textContent = param.label;
+    const valEl = document.createElement('span');
+    valEl.className = 'param-value';
+    valEl.textContent = formatVal(param.def, param.step);
+    valEls[param.id] = valEl;
+    row.append(nameEl, valEl);
+    const slider = document.createElement('input');
+    slider.type = 'range';
+    slider.min = param.min; slider.max = param.max; slider.step = param.step;
+    slider.value = param.def;
+    sliders[param.id] = slider;
+    slider.addEventListener('input', () => {
+      const v = parseFloat(slider.value);
+      state[param.id] = v;
+      valEl.textContent = formatVal(v, param.step);
+      if (param.id === 'width' || param.id === 'height') updateActivePreset();
+      scheduleRender();
+    });
+    wrap.append(row, slider);
+    body.append(wrap);
+  });
+
+  groupEl.append(hdr, body);
+  controlsEl.append(groupEl);
+});
+
+function updateActivePreset() {
+  presetBtns.forEach(({ btn, w, h }) => {
+    btn.classList.toggle('active', state.width === w && state.height === h);
+  });
+}
+updateActivePreset();
+
+function formatVal(v, step) {
+  if (step >= 1) return String(Math.round(v));
+  const decimals = String(step).split('.')[1]?.length ?? 2;
+  return v.toFixed(Math.min(decimals, 3));
+}
+
+const NS = 'http://www.w3.org/2000/svg';
+const svgEl = document.getElementById('canvas');
+function svgEl_(tag, attrs) {
+  const e = document.createElementNS(NS, tag);
+  for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v);
+  return e;
+}
+
+// ════════════════════════════════════════════════════════════════════
+//  render() — v1 multi-pass smooth noise
+// ════════════════════════════════════════════════════════════════════
+function render() {
+  const t0 = performance.now();
+  const p = state;
+  const seed = Math.max(0, parseInt(document.getElementById('seed-input').value) || 0);
+  const rand = makePRNG(seed);
+
+  const margin = 2;
+  const vw = p.width + 2 * margin;
+  const vh = p.height + 2 * margin;
+  const ox = margin, oy = margin;
+
+  svgEl.setAttribute('viewBox', `0 0 ${vw} ${vh}`);
+  while (svgEl.firstChild) svgEl.removeChild(svgEl.lastChild);
+
+  const W = p.width, H = p.height;
+  const numLines   = p.numLines;
+  const resolution = p.resolution;
+  const maxPasses  = p.maxPasses;
+  const maxAmp     = p.maxAmplitude;
+  const maxFreq    = p.maxFrequency;
+  const octaves    = p.octaves;
+  const chaosExp   = p.chaosExponent;
+  const hWeight    = p.hWeight;
+  const vWeight    = p.vWeight;
+  const sw         = p.strokeWidth;
+
+  const marginTop = H * 0.05;
+  const usableH = H - 2 * marginTop;
+  const spacing = numLines > 1 ? usableH / (numLines - 1) : usableH;
+
+  function noise1d(x, freq, phase) {
+    let val = 0, amp = 1, f = freq, ph = phase;
+    for (let o = 0; o < octaves; o++) {
+      val += amp * Math.sin(f * x + ph);
+      val += amp * 0.5 * Math.sin(f * 1.7 * x + ph * 2.3 + 1.1);
+      f *= 2.1;
+      amp *= 0.5;
+      ph += 3.7;
+    }
+    return val;
+  }
+
+  function chaosFactor(xn, yn) {
+    const hc = 1.0 - xn, vc = 1.0 - yn;
+    const wt = hWeight + vWeight;
+    const combined = wt > 0 ? (hWeight * hc + vWeight * vc) / wt : 0;
+    return Math.pow(combined, chaosExp);
+  }
+
+  const paths = [];
+
+  for (let li = 0; li < numLines; li++) {
+    const yBase = marginTop + li * spacing;
+    const yNorm = numLines > 1 ? li / (numLines - 1) : 0;
+    const vChaos = Math.pow(1.0 - yNorm, chaosExp);
+    const nPasses = Math.max(1, Math.round(maxPasses * vChaos * 0.8 + 1));
+
+    for (let pi = 0; pi < nPasses; pi++) {
+      const phaseSeed = rand() * 1000;
+      const phase2    = rand() * 1000;
+      const ampVar    = 0.6 + rand() * 0.8;
+
+      let d = '';
+      for (let i = 0; i <= resolution; i++) {
+        const xn = i / resolution;
+        const x  = xn * W;
+        const chaos = chaosFactor(xn, yNorm);
+        const amp  = maxAmp * chaos * ampVar;
+        const freq = maxFreq * (1.0 + chaos * 3.0);
+
+        let displacement = amp * noise1d(x, freq, phaseSeed);
+
+        if (chaos > 0.3) {
+          const detailAmp  = amp * 0.4 * ((chaos - 0.3) / 0.7);
+          const detailFreq = freq * 3.5;
+          displacement += detailAmp * Math.sin(detailFreq * x + phase2);
+        }
+
+        if (chaos > 0.5) {
+          displacement += (rand() - 0.5) * amp * 0.15;
+        }
+
+        const px = (x + ox).toFixed(2);
+        const py = (yBase + displacement + oy).toFixed(2);
+        d += i === 0 ? `M${px},${py}` : `L${px},${py}`;
+      }
+      paths.push(d);
+    }
+  }
+
+  for (const d of paths) {
+    svgEl.appendChild(svgEl_('path', {
+      d, fill: 'none', stroke: 'black',
+      'stroke-width': String(sw),
+      'stroke-linecap': 'round',
+      'stroke-linejoin': 'round',
+    }));
+  }
+
+  fitSvg();
+  document.getElementById('render-time').textContent = `${(performance.now() - t0).toFixed(1)} ms`;
+}
+
+// ── Boilerplate: fit, zoom/pan, toolbar ──────────────────────────────
+const wrapper = document.querySelector('.svg-wrapper');
+function fitSvg() {
+  const vbAttr = svgEl.getAttribute('viewBox');
+  if (!vbAttr) return;
+  const [,,vw,vh] = vbAttr.split(' ').map(Number);
+  const pad = 24;
+  const availW = wrapper.clientWidth - pad*2;
+  const availH = wrapper.clientHeight - pad*2;
+  const aspect = vw/vh;
+  let displayW, displayH;
+  if (availW/availH > aspect) { displayH = availH; displayW = availH*aspect; }
+  else { displayW = availW; displayH = availW/aspect; }
+  svgEl.style.width = `${Math.floor(displayW)}px`;
+  svgEl.style.height = `${Math.floor(displayH)}px`;
+}
+new ResizeObserver(fitSvg).observe(wrapper);
+
+let timer = null;
+function scheduleRender() { clearTimeout(timer); timer = setTimeout(render, 55); }
+
+document.getElementById('randomize-btn').addEventListener('click', () => {
+  document.getElementById('seed-input').value = Math.floor(Math.random()*9_999_999);
+  render();
+});
+document.getElementById('rerender-btn').addEventListener('click', render);
+document.getElementById('seed-input').addEventListener('change', render);
+document.getElementById('seed-input').addEventListener('keydown', e => { if (e.key==='Enter') render(); });
+
+document.getElementById('download-btn').addEventListener('click', () => {
+  const seed = document.getElementById('seed-input').value;
+  const clone = svgEl.cloneNode(true);
+  clone.setAttribute('width', `${state.width+4}mm`);
+  clone.setAttribute('height', `${state.height+4}mm`);
+  const bg = document.createElementNS(NS,'rect');
+  bg.setAttribute('width','100%'); bg.setAttribute('height','100%');
+  bg.setAttribute('fill','white');
+  clone.insertBefore(bg, clone.firstChild);
+  clone.setAttribute('xmlns', NS);
+  const blob = new Blob(
+    [`<?xml version="1.0" encoding="UTF-8"?>\n<!-- ${ARTWORK_NAME} | seed=${seed} -->\n`, clone.outerHTML],
+    { type: 'image/svg+xml' },
+  );
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `${ARTWORK_NAME}-s${seed}.svg`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+});
+
+const svgWrapper = document.getElementById('svg-wrapper');
+const zoomLayer = document.getElementById('zoom-layer');
+const zoomLabel = document.getElementById('zoom-label');
+let zoom = 1, pan = {x:0, y:0};
+
+function applyTransform() {
+  zoomLayer.style.transform = `translate(${pan.x}px,${pan.y}px) scale(${zoom})`;
+  zoomLabel.textContent = `${Math.round(zoom*100)}%`;
+}
+function resetZoom() { zoom=1; pan={x:0,y:0}; applyTransform(); }
+
+svgWrapper.addEventListener('wheel', e => {
+  e.preventDefault();
+  const rect = svgWrapper.getBoundingClientRect();
+  const mx = e.clientX-rect.left-rect.width/2;
+  const my = e.clientY-rect.top-rect.height/2;
+  const factor = e.deltaY<0 ? 1.12 : 1/1.12;
+  const newZoom = Math.max(0.1, Math.min(12, zoom*factor));
+  pan.x = mx-(mx-pan.x)*(newZoom/zoom);
+  pan.y = my-(my-pan.y)*(newZoom/zoom);
+  zoom = newZoom;
+  applyTransform();
+}, {passive:false});
+
+let dragging=false, dragStart={x:0,y:0}, panStart={x:0,y:0};
+svgWrapper.addEventListener('mousedown', e => {
+  if (e.button!==0) return; e.preventDefault();
+  dragging=true; dragStart={x:e.clientX,y:e.clientY}; panStart={...pan};
+  svgWrapper.classList.add('dragging');
+});
+window.addEventListener('mousemove', e => {
+  if (!dragging) return;
+  pan.x = panStart.x+e.clientX-dragStart.x;
+  pan.y = panStart.y+e.clientY-dragStart.y;
+  applyTransform();
+});
+window.addEventListener('mouseup', () => {
+  if (!dragging) return; dragging=false;
+  svgWrapper.classList.remove('dragging');
+});
+svgWrapper.addEventListener('dblclick', resetZoom);
+document.getElementById('zoom-reset-btn').addEventListener('click', resetZoom);
+
+render();
+</script>
+</body>
+</html>
