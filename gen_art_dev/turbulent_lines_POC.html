@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <!--
   ╔══════════════════════════════════════════════════════════════╗
-  ║  TURBULENT LINES — master + child/grandchild + domain warp   ║
+  ║  TURBULENT LINES — master curve + child strand bundles       ║
   ╚══════════════════════════════════════════════════════════════╝
 -->
 <html lang="en">
@@ -28,7 +28,7 @@
     .group.collapsed .caret{transform:rotate(-90deg)}
     .group.collapsed .group-body{display:none}
     .caret{display:inline-block;transition:transform .18s}
-    .group-body{padding:8px;display:flex;flex-direction:column;gap:10px;overflow-y:auto;max-height:320px;scrollbar-width:thin;scrollbar-color:var(--border) transparent;border-radius:0 0 4px 4px}
+    .group-body{padding:8px;display:flex;flex-direction:column;gap:10px;overflow-y:auto;max-height:280px;scrollbar-width:thin;scrollbar-color:var(--border) transparent;border-radius:0 0 4px 4px}
     .param{display:flex;flex-direction:column;gap:3px}
     .param-label{display:flex;justify-content:space-between;align-items:baseline;font-size:12px}
     .param-name{color:var(--text)}
@@ -62,7 +62,7 @@
 
 <header>
   <h1>TURBULENT LINES</h1>
-  <span class="subtitle">master + child/grandchild bundles + domain warping</span>
+  <span class="subtitle">master curve + child strand bundles</span>
 </header>
 
 <div class="layout">
@@ -122,52 +122,33 @@ const SCHEMA = [
   {
     group: 'Structure',
     items: [
-      { id: 'numLines',    label: 'Line count',        min: 10, max: 80,  step: 1,  def: 45  },
-      { id: 'numBumps',    label: 'Bumps per line',    min: 3,  max: 60,  step: 1,  def: 25  },
+      { id: 'numLines',    label: 'Line count',     min: 10, max: 80,  step: 1,  def: 45  },
+      { id: 'resolution',  label: 'Points / line',  min: 100,max: 600, step: 10, def: 350 },
       { id: 'maxPasses',   label: 'Max child strands', min: 1,  max: 25,  step: 1,  def: 14  },
-      { id: 'spacingDecay',label: 'Top density bias',  min: 0,  max: 3.0, step: 0.1,def: 0.0 },
     ],
   },
   {
     group: 'Master curve',
     items: [
       { id: 'maxAmplitude',   label: 'Max amplitude',      min: 1,   max: 25,  step: 0.5, def: 12  },
-      { id: 'smoothing',      label: 'Curve smoothing',    min: 0.0, max: 1.0, step: 0.05,def: 0.5 },
+      { id: 'controlSpacing', label: 'Control pt spacing', min: 3,   max: 30,  step: 1,   def: 8   },
+      { id: 'smoothing',      label: 'Curve smoothing',    min: 0.1, max: 1.0, step: 0.05,def: 0.5 },
     ],
   },
   {
     group: 'Child strands',
     items: [
-      { id: 'childSpread',    label: 'Spread from master', min: 0.05, max: 1.0, step: 0.05, def: 0.35 },
-      { id: 'childFreqScale', label: 'Wiggle frequency',   min: 0.02, max: 0.3, step: 0.01, def: 0.10 },
-      { id: 'childOctaves',   label: 'Wiggle layers',      min: 1,    max: 5,   step: 1,    def: 2    },
+      { id: 'childSpread',    label: 'Child spread',       min: 0.05, max: 1.0, step: 0.05, def: 0.35 },
+      { id: 'childFreqScale', label: 'Child wiggle freq',  min: 0.02, max: 0.3, step: 0.01, def: 0.10 },
+      { id: 'childOctaves',   label: 'Child wiggle layers',min: 1,    max: 5,   step: 1,    def: 2    },
     ],
   },
   {
-    group: 'Grandchild strands',
+    group: 'Gradient',
     items: [
-      { id: 'gcCount',        label: 'Per child (0=off)',   min: 0,    max: 8,   step: 1,    def: 0    },
-      { id: 'gcSpread',       label: 'Spread from parent',  min: 0.05, max: 1.0, step: 0.05, def: 0.20 },
-      { id: 'gcFreqScale',    label: 'Wiggle frequency',    min: 0.02, max: 0.5, step: 0.01, def: 0.15 },
-      { id: 'gcOctaves',      label: 'Wiggle layers',       min: 1,    max: 5,   step: 1,    def: 3    },
-      { id: 'gcAmpDecay',     label: 'Amplitude decay',     min: 0.1,  max: 1.0, step: 0.05, def: 0.6  },
-    ],
-  },
-  {
-    group: 'Chaos focus',
-    items: [
-      { id: 'chaosOriginX',  label: 'Origin X (0=left)',   min: 0,   max: 1.0, step: 0.05, def: 0.0  },
-      { id: 'chaosOriginY',  label: 'Origin Y (0=top)',    min: 0,   max: 1.0, step: 0.05, def: 0.0  },
-      { id: 'chaosRadius',   label: 'Chaos radius',        min: 0.2, max: 2.0, step: 0.05, def: 0.85 },
-      { id: 'chaosExponent', label: 'Falloff sharpness',   min: 0.5, max: 5.0, step: 0.1,  def: 2.2  },
-    ],
-  },
-  {
-    group: 'Domain warp',
-    items: [
-      { id: 'warpStrength',  label: 'Strength (0=off)',    min: 0,    max: 15.0, step: 0.5, def: 0    },
-      { id: 'warpScale',     label: 'Scale',               min: 0.005,max: 0.08, step: 0.001,def:0.015},
-      { id: 'warpOctaves',   label: 'Octaves',             min: 1,    max: 6,    step: 1,   def: 3    },
+      { id: 'chaosExponent', label: 'Chaos falloff',      min: 0.5, max: 5.0, step: 0.1, def: 2.2 },
+      { id: 'hWeight',       label: 'Horizontal weight',  min: 0,   max: 1,   step: 0.05,def: 0.65},
+      { id: 'vWeight',       label: 'Vertical weight',    min: 0,   max: 1,   step: 0.05,def: 0.35},
     ],
   },
   {
@@ -252,77 +233,27 @@ function svgEl_(tag, attrs) {
 }
 
 // ════════════════════════════════════════════════════════════════════
-//  Shared helpers
-// ════════════════════════════════════════════════════════════════════
-function catmullRom(y0, y1, y2, y3, t) {
-  const t2=t*t, t3=t2*t;
-  return 0.5*((2*y1)+(-y0+y2)*t+(2*y0-5*y1+4*y2-y3)*t2+(-y0+3*y1-3*y2+y3)*t3);
-}
-
-function sampleCurve(ctrl, n) {
-  const len=ctrl.length, out=new Float64Array(n+1);
-  for (let i=0;i<=n;i++){
-    const pos=(i/n)*(len-1), idx=Math.min(Math.floor(pos),len-2), frac=pos-idx;
-    out[i]=catmullRom(ctrl[Math.max(0,idx-1)],ctrl[idx],ctrl[Math.min(len-1,idx+1)],ctrl[Math.min(len-1,idx+2)],frac);
-  }
-  return out;
-}
-
-function smoothCtrl(pts, amount) {
-  const n=pts.length, out=new Float64Array(n);
-  for(let i=0;i<n;i++){
-    const prev=i>0?pts[i-1]:pts[i], next=i<n-1?pts[i+1]:pts[i];
-    out[i]=pts[i]*(1-amount)+(prev+next)/2*amount;
-  }
-  return out;
-}
-
-function sineWiggle(x, freq, phase, octaves) {
-  let val=0,amp=1,f=freq,ph=phase;
-  for(let o=0;o<octaves;o++){val+=amp*Math.sin(f*x+ph);f*=1.9;amp*=0.45;ph+=2.7}
-  return val;
-}
-
-// ── 2D gradient noise (for domain warping) ─────────────────────────
-// Permutation-based, matching geological_strata approach
-function buildPerm(seed) {
-  // Simple seeded shuffle
-  const r = makePRNG(seed);
-  const p = Array.from({length:256},(_,i)=>i);
-  for (let i=255;i>0;i--){const j=Math.floor(r()*(i+1));[p[i],p[j]]=[p[j],p[i]]}
-  return p.concat(p);
-}
-
-const GRADS = Array.from({length:12},(_,i)=>{
-  const a=Math.PI*2*i/12; return [Math.cos(a),Math.sin(a)];
-});
-
-function noise2(x,y,perm) {
-  const xi=Math.floor(x)&255, yi=Math.floor(y)&255;
-  const xf=x-Math.floor(x), yf=y-Math.floor(y);
-  const u=xf*xf*xf*(xf*(xf*6-15)+10), v=yf*yf*yf*(yf*(yf*6-15)+10);
-  const aa=perm[perm[xi]+yi]%12, ab=perm[perm[xi]+yi+1]%12;
-  const ba=perm[perm[xi+1]+yi]%12, bb=perm[perm[xi+1]+yi+1]%12;
-  function dot(gi,fx,fy){const g=GRADS[gi];return g[0]*fx+g[1]*fy}
-  const x1=dot(aa,xf,yf)+u*(dot(ba,xf-1,yf)-dot(aa,xf,yf));
-  const x2=dot(ab,xf,yf-1)+u*(dot(bb,xf-1,yf-1)-dot(ab,xf,yf-1));
-  return x1+v*(x2-x1);
-}
-
-function fbm(x,y,perm,octaves,lac,gain) {
-  let total=0,amp=1,freq=1,maxAmp=0;
-  for(let i=0;i<octaves;i++){total+=noise2(x*freq,y*freq,perm)*amp;maxAmp+=amp;amp*=gain;freq*=lac}
-  return total/maxAmp;
-}
-
-function warpedFbm(x,y,perm,perm2,octaves,warpStr,warpScale,warpOct) {
-  const wx=fbm(x*warpScale,y*warpScale,perm2,warpOct,2.0,0.5)*warpStr;
-  const wy=fbm(x*warpScale+5.2,y*warpScale+1.3,perm2,warpOct,2.0,0.5)*warpStr;
-  return fbm(x+wx,y+wy,perm,octaves,2.0,0.5);
-}
-
-// ════════════════════════════════════════════════════════════════════
 //  render()
+//
+//  APPROACH:
+//  1) For each horizontal line, generate a MASTER CURVE by placing
+//     random control points at regular intervals and cubic-
+//     interpolating between them. The control point amplitudes
+//     are modulated by the chaos gradient — big near upper-left,
+//     zero near lower-right. This produces smooth, round, organic
+//     curves (not sine spikes).
+//
+//  2) Then spawn N CHILD STRANDS that closely follow the master
+//     curve with small independent deviations. Each child adds
+//     its own gentle wiggle (also cubic-smooth) so strands diverge
+//     slightly at peaks and converge in calm areas.
+//
+//  3) The number of child strands scales with chaos — more children
+//     in turbulent zones = denser, smokier bundles.
+//
+//  The result: each bump/wave on a line has its own tight cluster
+//  of lines tracing nearly the same shape, creating the "smoke
+//  following each amplitude" effect from the reference.
 // ════════════════════════════════════════════════════════════════════
 function render() {
   const t0 = performance.now();
@@ -331,175 +262,181 @@ function render() {
   const rand = makePRNG(seed);
 
   const margin = 2;
-  const vw = p.width+2*margin, vh = p.height+2*margin;
+  const vw = p.width + 2*margin, vh = p.height + 2*margin;
   const ox = margin, oy = margin;
+
   svgEl.setAttribute('viewBox', `0 0 ${vw} ${vh}`);
   while (svgEl.firstChild) svgEl.removeChild(svgEl.lastChild);
 
-  const W=p.width, H=p.height;
-  const numLines    = p.numLines;
-  const numBumps    = p.numBumps;
-  const maxPasses   = p.maxPasses;
-  const spacingDecay= p.spacingDecay;
-  const maxAmp      = p.maxAmplitude;
-  const smoothAmt   = p.smoothing;
-  const childSpr    = p.childSpread;
-  const childFrq    = p.childFreqScale;
-  const childOct    = p.childOctaves;
-  const gcCount     = p.gcCount;
-  const gcSpread    = p.gcSpread;
-  const gcFrq       = p.gcFreqScale;
-  const gcOct       = p.gcOctaves;
-  const gcDecay     = p.gcAmpDecay;
-  const chaosOX     = p.chaosOriginX;
-  const chaosOY     = p.chaosOriginY;
-  const chaosR      = p.chaosRadius;
-  const chaosExp    = p.chaosExponent;
-  const warpStr     = p.warpStrength;
-  const warpScale   = p.warpScale;
-  const warpOct     = p.warpOctaves;
-  const sw          = p.strokeWidth;
+  const W = p.width, H = p.height;
+  const numLines      = p.numLines;
+  const resolution     = p.resolution;
+  const maxPasses      = p.maxPasses;
+  const maxAmp         = p.maxAmplitude;
+  const ctrlSpacing    = p.controlSpacing;
+  const smoothing      = p.smoothing;
+  const childSpread    = p.childSpread;
+  const childFreqScale = p.childFreqScale;
+  const childOctaves   = p.childOctaves;
+  const chaosExp       = p.chaosExponent;
+  const hWeight        = p.hWeight;
+  const vWeight        = p.vWeight;
+  const sw             = p.strokeWidth;
 
-  const RES = 350;
   const marginY = H * 0.04;
-  const usableH = H - 2*marginY;
+  const usableH = H - 2 * marginY;
+  const spacing = numLines > 1 ? usableH / (numLines - 1) : usableH;
 
-  // ── Line Y positions with density bias ───────────────────────────
-  // spacingDecay=0 → uniform. Higher → lines bunch toward top.
-  // We use an exponential distribution of t values in [0,1].
-  const lineYs = [];
-  for (let li=0; li<numLines; li++) {
-    let t = li / (numLines - 1);  // uniform 0..1
-    if (spacingDecay > 0) {
-      // Exponential remapping: more lines near t=0 (top)
-      // f(t) = (exp(decay*t) - 1) / (exp(decay) - 1)
-      t = (Math.exp(spacingDecay * t) - 1) / (Math.exp(spacingDecay) - 1);
-    }
-    lineYs.push(marginY + t * usableH);
-  }
-
-  // ── Chaos factor: radial from origin ─────────────────────────────
+  // ── Chaos factor ─────────────────────────────────────────────────
   function chaosFactor(xn, yn) {
-    const dx = xn - chaosOX;
-    const dy = yn - chaosOY;
-    const dist = Math.sqrt(dx*dx + dy*dy);
-    const normalized = Math.min(1, dist / Math.max(chaosR, 0.01));
-    return Math.pow(Math.max(0, 1 - normalized), chaosExp);
+    const hc = 1-xn, vc = 1-yn;
+    const wt = hWeight + vWeight;
+    const c = wt > 0 ? (hWeight*hc + vWeight*vc)/wt : 0;
+    return Math.pow(Math.max(0,Math.min(1,c)), chaosExp);
   }
 
-  // ── Domain warp permutation tables ───────────────────────────────
-  let perm, perm2;
-  if (warpStr > 0) {
-    perm = buildPerm(seed + 111);
-    perm2 = buildPerm(seed + 222);
+  // ── Cubic Hermite interpolation (Catmull-Rom) ────────────────────
+  // Given control values y0,y1,y2,y3 and t in [0,1], interpolate
+  // between y1 and y2 with smooth tangents.
+  function catmullRom(y0, y1, y2, y3, t) {
+    const t2 = t*t, t3 = t2*t;
+    return 0.5 * (
+      (2*y1) +
+      (-y0 + y2) * t +
+      (2*y0 - 5*y1 + 4*y2 - y3) * t2 +
+      (-y0 + 3*y1 - 3*y2 + y3) * t3
+    );
   }
 
-  // ── Derive child control points ──────────────────────────────────
-  function deriveCtrl(parentCtrl, spread, ampScale, yNorm) {
-    const n = parentCtrl.length;
-    const out = new Float64Array(n);
-    for (let k=0;k<n;k++){
-      const xn = k/(n-1);
-      const chaos = chaosFactor(xn, yNorm);
-      out[k] = parentCtrl[k] + (rand()*2-1) * maxAmp * spread * ampScale * chaos;
-    }
-    if (smoothAmt > 0) return smoothCtrl(out, smoothAmt);
-    return out;
-  }
-
-  // ── Build path string with optional domain warping ───────────────
-  function buildPath(curve, yBase, yNorm) {
-    let d = '';
-    for (let i=0; i<=RES; i++) {
-      let x = (i/RES) * W;
-      let y = yBase + curve[i];
-
-      // Apply domain warp
-      if (warpStr > 0) {
-        const chaos = chaosFactor(i/RES, yNorm);
-        const warpAmt = warpStr * chaos;
-        if (warpAmt > 0.01) {
-          const warpDy = warpedFbm(
-            x * warpScale, y * warpScale,
-            perm, perm2, warpOct, warpAmt, warpScale/0.015, warpOct
-          ) * warpAmt;
-          y += warpDy;
-        }
-      }
-
-      d += i===0 ? `M${(x+ox).toFixed(2)},${(y+oy).toFixed(2)}`
-                  : `L${(x+ox).toFixed(2)},${(y+oy).toFixed(2)}`;
-    }
-    return d;
-  }
-
-  // ── Add wiggle to a curve ────────────────────────────────────────
-  function addWiggle(curve, freq, phase, octaves, ampFactor, yNorm) {
-    const out = new Float64Array(curve.length);
-    for (let i=0;i<curve.length;i++){
-      const xn=i/(curve.length-1), x=xn*W;
-      const chaos = chaosFactor(xn, yNorm);
-      out[i] = curve[i] + sineWiggle(x, freq*(1+chaos*2), phase, octaves) * maxAmp * ampFactor * chaos;
+  // ── Generate smooth curve from control points ────────────────────
+  // Returns an array of `resolution+1` displacement values.
+  function generateSmoothCurve(controlPoints, numSamples) {
+    const n = controlPoints.length;
+    const out = new Float64Array(numSamples + 1);
+    for (let i = 0; i <= numSamples; i++) {
+      const t = i / numSamples;  // 0..1 across the line
+      const pos = t * (n - 1);   // position in control point space
+      const idx = Math.min(Math.floor(pos), n - 2);
+      const frac = pos - idx;
+      const y0 = controlPoints[Math.max(0, idx - 1)];
+      const y1 = controlPoints[idx];
+      const y2 = controlPoints[Math.min(n - 1, idx + 1)];
+      const y3 = controlPoints[Math.min(n - 1, idx + 2)];
+      out[i] = catmullRom(y0, y1, y2, y3, frac);
     }
     return out;
+  }
+
+  // ── Gentle sine wiggle for child deviation ───────────────────────
+  function childWiggle(x, freq, phase, octaves) {
+    let val = 0, amp = 1, f = freq, ph = phase;
+    for (let o = 0; o < octaves; o++) {
+      val += amp * Math.sin(f * x + ph);
+      f *= 1.9;
+      amp *= 0.45;
+      ph += 2.7;
+    }
+    return val;
   }
 
   let totalPaths = 0;
   const allPaths = [];
 
-  for (let li=0; li<numLines; li++) {
-    const yBase = lineYs[li];
-    const yNorm = numLines > 1 ? lineYs[li] / H : 0;  // use actual y position for chaos calc
+  for (let li = 0; li < numLines; li++) {
+    const yBase = marginY + li * spacing;
+    const yNorm = numLines > 1 ? li / (numLines - 1) : 0;
 
-    // Master control points
-    const numCtrl = Math.max(3, numBumps);
-    const masterCtrl = new Float64Array(numCtrl);
-    for (let ci=0; ci<numCtrl; ci++) {
-      const xn = ci/(numCtrl-1);
+    // ── Build master curve control points ──────────────────────────
+    // Place control points every `ctrlSpacing` mm along the line.
+    // Each control point's amplitude is modulated by local chaos.
+    const numCtrl = Math.max(3, Math.ceil(W / ctrlSpacing) + 1);
+    const ctrlPts = new Float64Array(numCtrl);
+
+    for (let ci = 0; ci < numCtrl; ci++) {
+      const xn = ci / (numCtrl - 1);
       const chaos = chaosFactor(xn, yNorm);
-      masterCtrl[ci] = (rand()*2-1) * maxAmp * chaos;
+      // Random amplitude at this control point, scaled by chaos
+      const amp = maxAmp * chaos;
+      ctrlPts[ci] = (rand() * 2 - 1) * amp;
     }
-    let smoothed = masterCtrl;
-    if (smoothAmt > 0) { for (let pass=0;pass<2;pass++) smoothed = smoothCtrl(smoothed, smoothAmt); }
 
-    // Child count
+    // Optional: apply smoothing pass to control points
+    if (smoothing > 0) {
+      for (let pass = 0; pass < 2; pass++) {
+        const temp = new Float64Array(numCtrl);
+        for (let ci = 0; ci < numCtrl; ci++) {
+          const prev = ci > 0 ? ctrlPts[ci-1] : ctrlPts[ci];
+          const next = ci < numCtrl-1 ? ctrlPts[ci+1] : ctrlPts[ci];
+          temp[ci] = ctrlPts[ci] * (1-smoothing) + (prev+next)/2 * smoothing;
+        }
+        for (let ci = 0; ci < numCtrl; ci++) ctrlPts[ci] = temp[ci];
+      }
+    }
+
+    // ── Sample master curve at resolution ──────────────────────────
+    const masterCurve = generateSmoothCurve(ctrlPts, resolution);
+
+    // ── Determine child count based on chaos ───────────────────────
     const avgChaos = chaosFactor(0.25, yNorm);
     const nChildren = Math.max(1, Math.round(maxPasses * avgChaos));
 
-    for (let ci=0; ci<nChildren; ci++) {
+    // ── Draw master + children ─────────────────────────────────────
+    for (let ci = 0; ci < nChildren; ci++) {
       const childPhase = rand() * 1000;
-      const childCtrl = deriveCtrl(smoothed, childSpr, 1.0, yNorm);
-      const childCurve = sampleCurve(childCtrl, RES);
-      const finalChild = addWiggle(childCurve, childFrq, childPhase, childOct, 0.08, yNorm);
+      const childAmpScale = (rand() * 2 - 1) * childSpread;
 
-      allPaths.push(buildPath(finalChild, yBase, yNorm));
-      totalPaths++;
-
-      // Grandchildren
-      if (gcCount > 0) {
-        const nGC = Math.max(0, Math.round(gcCount * avgChaos));
-        for (let gi=0; gi<nGC; gi++) {
-          const gcPhase = rand() * 1000;
-          const gcCtrl = deriveCtrl(childCtrl, gcSpread, gcDecay, yNorm);
-          const gcCurve = sampleCurve(gcCtrl, RES);
-          const finalGC = addWiggle(gcCurve, gcFrq, gcPhase, gcOct, 0.06, yNorm);
-          allPaths.push(buildPath(finalGC, yBase, yNorm));
-          totalPaths++;
-        }
+      // Each child also gets its own subtle control point offsets
+      const childCtrl = new Float64Array(numCtrl);
+      for (let k = 0; k < numCtrl; k++) {
+        const xn = k / (numCtrl - 1);
+        const chaos = chaosFactor(xn, yNorm);
+        childCtrl[k] = ctrlPts[k] + (rand() * 2 - 1) * maxAmp * childSpread * chaos;
       }
+      // Smooth child control points too
+      if (smoothing > 0) {
+        const temp = new Float64Array(numCtrl);
+        for (let k = 0; k < numCtrl; k++) {
+          const prev = k > 0 ? childCtrl[k-1] : childCtrl[k];
+          const next = k < numCtrl-1 ? childCtrl[k+1] : childCtrl[k];
+          temp[k] = childCtrl[k] * (1-smoothing) + (prev+next)/2 * smoothing;
+        }
+        for (let k = 0; k < numCtrl; k++) childCtrl[k] = temp[k];
+      }
+      const childCurve = generateSmoothCurve(childCtrl, resolution);
+
+      let d = '';
+      for (let i = 0; i <= resolution; i++) {
+        const xn = i / resolution;
+        const x = xn * W;
+        const chaos = chaosFactor(xn, yNorm);
+
+        // Child displacement = interpolated child curve + gentle wiggle
+        let dy = childCurve[i];
+
+        // Add fine wiggle proportional to chaos
+        const wiggle = childWiggle(x, childFreqScale * (1 + chaos * 2), childPhase, childOctaves);
+        dy += wiggle * maxAmp * 0.08 * chaos;
+
+        const px = (x + ox).toFixed(2);
+        const py = (yBase + dy + oy).toFixed(2);
+        d += i === 0 ? `M${px},${py}` : `L${px},${py}`;
+      }
+      allPaths.push(d);
+      totalPaths++;
     }
   }
 
   for (const d of allPaths) {
     svgEl.appendChild(svgEl_('path', {
-      d, fill:'none', stroke:'black',
+      d, fill: 'none', stroke: 'black',
       'stroke-width': String(sw),
-      'stroke-linecap':'round', 'stroke-linejoin':'round',
+      'stroke-linecap': 'round',
+      'stroke-linejoin': 'round',
     }));
   }
 
   fitSvg();
-  const ms = (performance.now()-t0).toFixed(1);
+  const ms = (performance.now() - t0).toFixed(1);
   document.getElementById('render-time').textContent = `${ms} ms`;
   document.getElementById('debug-info').textContent = `${totalPaths} paths`;
 }
@@ -507,9 +444,11 @@ function render() {
 // ── Boilerplate: fit, zoom/pan, toolbar ──────────────────────────────
 const wrapper = document.querySelector('.svg-wrapper');
 function fitSvg() {
-  const vb=svgEl.getAttribute('viewBox'); if(!vb) return;
-  const [,,vw,vh]=vb.split(' ').map(Number);
-  const pad=24, aW=wrapper.clientWidth-pad*2, aH=wrapper.clientHeight-pad*2, asp=vw/vh;
+  const vb = svgEl.getAttribute('viewBox');
+  if (!vb) return;
+  const [,,vw,vh] = vb.split(' ').map(Number);
+  const pad=24, aW=wrapper.clientWidth-pad*2, aH=wrapper.clientHeight-pad*2;
+  const asp=vw/vh;
   let dW,dH;
   if(aW/aH>asp){dH=aH;dW=aH*asp}else{dW=aW;dH=aW/asp}
   svgEl.style.width=`${Math.floor(dW)}px`; svgEl.style.height=`${Math.floor(dH)}px`;

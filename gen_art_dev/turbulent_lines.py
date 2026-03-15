@@ -1,12 +1,10 @@
 """
-Turbulent Lines — master curve + child strand bundles.
+Turbulent Lines — master + child/grandchild bundles + domain warping.
 
-For each horizontal line, a smooth MASTER CURVE is generated via
-Catmull-Rom interpolation through random control points (amplitudes
-modulated by chaos gradient). Then N CHILD STRANDS are spawned that
-closely follow the master with slight independent deviations, creating
-tight bundles of lines that trace each bump's shape — like smoke
-clinging to each wave.
+Horizontal lines transition from chaotic smoke to calm order. Chaos is
+focused radially from a configurable origin point (default upper-left).
+Line spacing can be biased denser toward the top. An optional domain
+warping layer (inspired by geological_strata) adds organic folding.
 """
 
 import math
@@ -15,171 +13,225 @@ from scripts.generators import BaseGenerator
 from scripts.svg_utils import SvgBuilder
 
 
+# ── 2D gradient noise (for domain warping) ────────────────────────────
+def _build_perm(seed):
+    rng = random.Random(seed)
+    p = list(range(256))
+    rng.shuffle(p)
+    return p + p
+
+_GRADS = [(math.cos(a), math.sin(a)) for a in (math.pi * 2 * i / 12 for i in range(12))]
+
+def _noise2(x, y, perm):
+    xi = int(math.floor(x)) & 255
+    yi = int(math.floor(y)) & 255
+    xf = x - math.floor(x)
+    yf = y - math.floor(y)
+    u = xf*xf*xf*(xf*(xf*6-15)+10)
+    v = yf*yf*yf*(yf*(yf*6-15)+10)
+    aa = perm[perm[xi]+yi] % 12
+    ab = perm[perm[xi]+yi+1] % 12
+    ba = perm[perm[xi+1]+yi] % 12
+    bb = perm[perm[xi+1]+yi+1] % 12
+    def dot(gi, fx, fy):
+        g = _GRADS[gi]; return g[0]*fx + g[1]*fy
+    x1 = dot(aa,xf,yf) + u*(dot(ba,xf-1,yf)-dot(aa,xf,yf))
+    x2 = dot(ab,xf,yf-1) + u*(dot(bb,xf-1,yf-1)-dot(ab,xf,yf-1))
+    return x1 + v*(x2-x1)
+
+def _fbm(x, y, perm, octaves=6, lac=2.0, gain=0.5):
+    total = 0.0; amp = 1.0; freq = 1.0; max_amp = 0.0
+    for _ in range(octaves):
+        total += _noise2(x*freq, y*freq, perm) * amp
+        max_amp += amp; amp *= gain; freq *= lac
+    return total / max_amp
+
+def _warped_fbm(x, y, perm, perm2, octaves, warp_str, warp_scale, warp_oct):
+    wx = _fbm(x*warp_scale, y*warp_scale, perm2, warp_oct) * warp_str
+    wy = _fbm(x*warp_scale+5.2, y*warp_scale+1.3, perm2, warp_oct) * warp_str
+    return _fbm(x+wx, y+wy, perm, octaves)
+
+
 class TurbulentLines(BaseGenerator):
     def __init__(self, width=200, height=200, seed=42,
                  num_lines=45,
+                 num_bumps=25,
                  max_amplitude=12.0,
-                 control_spacing=8,
                  smoothing=0.5,
                  max_passes=14,
+                 spacing_decay=0.0,
                  child_spread=0.35,
                  child_freq_scale=0.10,
                  child_octaves=2,
-                 resolution=350,
+                 gc_count=0,
+                 gc_spread=0.20,
+                 gc_freq_scale=0.15,
+                 gc_octaves=3,
+                 gc_amp_decay=0.6,
+                 chaos_origin_x=0.0,
+                 chaos_origin_y=0.0,
+                 chaos_radius=0.85,
                  chaos_exponent=2.2,
-                 h_weight=0.65,
-                 v_weight=0.35,
+                 warp_strength=0.0,
+                 warp_scale=0.015,
+                 warp_octaves=3,
                  stroke_width='0.30px'):
-        super().__init__(width, height, seed,
-                         num_lines=num_lines,
-                         max_amplitude=max_amplitude,
-                         control_spacing=control_spacing,
-                         smoothing=smoothing,
-                         max_passes=max_passes,
-                         child_spread=child_spread,
-                         child_freq_scale=child_freq_scale,
-                         child_octaves=child_octaves,
-                         resolution=resolution,
-                         chaos_exponent=chaos_exponent,
-                         h_weight=h_weight,
-                         v_weight=v_weight,
-                         stroke_width=stroke_width)
+        super().__init__(width, height, seed)
         self.num_lines = num_lines
+        self.num_bumps = num_bumps
         self.max_amplitude = max_amplitude
-        self.control_spacing = control_spacing
         self.smoothing = smoothing
         self.max_passes = max_passes
+        self.spacing_decay = spacing_decay
         self.child_spread = child_spread
         self.child_freq_scale = child_freq_scale
         self.child_octaves = child_octaves
-        self.resolution = resolution
+        self.gc_count = gc_count
+        self.gc_spread = gc_spread
+        self.gc_freq_scale = gc_freq_scale
+        self.gc_octaves = gc_octaves
+        self.gc_amp_decay = gc_amp_decay
+        self.chaos_origin_x = chaos_origin_x
+        self.chaos_origin_y = chaos_origin_y
+        self.chaos_radius = chaos_radius
         self.chaos_exponent = chaos_exponent
-        self.h_weight = h_weight
-        self.v_weight = v_weight
+        self.warp_strength = warp_strength
+        self.warp_scale = warp_scale
+        self.warp_octaves = warp_octaves
         self.stroke_width = stroke_width
+        self.RES = 350
 
     def _chaos_factor(self, xn, yn):
-        hc = 1.0 - xn
-        vc = 1.0 - yn
-        wt = self.h_weight + self.v_weight
-        combined = (self.h_weight * hc + self.v_weight * vc) / wt if wt > 0 else 0
-        return max(0, min(1, combined)) ** self.chaos_exponent
+        dx = xn - self.chaos_origin_x
+        dy = yn - self.chaos_origin_y
+        dist = math.sqrt(dx*dx + dy*dy)
+        normalized = min(1, dist / max(self.chaos_radius, 0.01))
+        return max(0, 1 - normalized) ** self.chaos_exponent
 
     @staticmethod
     def _catmull_rom(y0, y1, y2, y3, t):
-        t2 = t * t
-        t3 = t2 * t
-        return 0.5 * (
-            (2 * y1) +
-            (-y0 + y2) * t +
-            (2 * y0 - 5 * y1 + 4 * y2 - y3) * t2 +
-            (-y0 + 3 * y1 - 3 * y2 + y3) * t3
-        )
+        t2 = t*t; t3 = t2*t
+        return 0.5*((2*y1)+(-y0+y2)*t+(2*y0-5*y1+4*y2-y3)*t2+(-y0+3*y1-3*y2+y3)*t3)
 
-    def _generate_smooth_curve(self, ctrl_pts, num_samples):
-        n = len(ctrl_pts)
-        out = []
-        for i in range(num_samples + 1):
-            t = i / num_samples
-            pos = t * (n - 1)
-            idx = min(int(pos), n - 2)
-            frac = pos - idx
-            y0 = ctrl_pts[max(0, idx - 1)]
-            y1 = ctrl_pts[idx]
-            y2 = ctrl_pts[min(n - 1, idx + 1)]
-            y3 = ctrl_pts[min(n - 1, idx + 2)]
-            out.append(self._catmull_rom(y0, y1, y2, y3, frac))
+    def _sample_curve(self, ctrl):
+        n = len(ctrl); out = []
+        for i in range(self.RES + 1):
+            pos = (i/self.RES)*(n-1); idx = min(int(pos), n-2); frac = pos - idx
+            out.append(self._catmull_rom(
+                ctrl[max(0,idx-1)], ctrl[idx],
+                ctrl[min(n-1,idx+1)], ctrl[min(n-1,idx+2)], frac))
         return out
 
-    def _smooth_points(self, pts):
-        n = len(pts)
-        temp = [0.0] * n
+    def _smooth_ctrl(self, pts):
+        n = len(pts); out = [0.0]*n
         for i in range(n):
-            prev = pts[i - 1] if i > 0 else pts[i]
-            nxt = pts[i + 1] if i < n - 1 else pts[i]
-            temp[i] = pts[i] * (1 - self.smoothing) + (prev + nxt) / 2 * self.smoothing
-        return temp
+            prev = pts[i-1] if i > 0 else pts[i]
+            nxt = pts[i+1] if i < n-1 else pts[i]
+            out[i] = pts[i]*(1-self.smoothing) + (prev+nxt)/2*self.smoothing
+        return out
 
-    def _child_wiggle(self, x, freq, phase, octaves):
-        val = 0.0
-        amp = 1.0
-        f = freq
-        ph = phase
+    def _derive_ctrl(self, parent, spread, amp_scale, y_norm):
+        n = len(parent); out = [0.0]*n
+        for k in range(n):
+            xn = k/(n-1); chaos = self._chaos_factor(xn, y_norm)
+            out[k] = parent[k] + (random.random()*2-1)*self.max_amplitude*spread*amp_scale*chaos
+        if self.smoothing > 0: out = self._smooth_ctrl(out)
+        return out
+
+    def _wiggle(self, x, freq, phase, octaves):
+        val=0; amp=1; f=freq; ph=phase
         for _ in range(octaves):
-            val += amp * math.sin(f * x + ph)
-            f *= 1.9
-            amp *= 0.45
-            ph += 2.7
+            val += amp*math.sin(f*x+ph); f*=1.9; amp*=0.45; ph+=2.7
         return val
+
+    def _add_wiggle(self, curve, freq, phase, octaves, amp_factor, y_norm):
+        out = []
+        for i, v in enumerate(curve):
+            xn = i/self.RES; x = xn*self.width
+            chaos = self._chaos_factor(xn, y_norm)
+            out.append(v + self._wiggle(x, freq*(1+chaos*2), phase, octaves)*self.max_amplitude*amp_factor*chaos)
+        return out
+
+    def _compute_line_ys(self):
+        margin_y = self.height * 0.04
+        usable_h = self.height - 2*margin_y
+        ys = []
+        for li in range(self.num_lines):
+            t = li / (self.num_lines - 1)
+            if self.spacing_decay > 0:
+                t = (math.exp(self.spacing_decay*t)-1) / (math.exp(self.spacing_decay)-1)
+            ys.append(margin_y + t*usable_h)
+        return ys
 
     def generate(self):
         builder = self.builder
-        w = self.width
-        h = self.height
+        w = self.width; h = self.height
+        line_ys = self._compute_line_ys()
 
-        margin_y = h * 0.04
-        usable_h = h - 2 * margin_y
-        spacing = usable_h / (self.num_lines - 1) if self.num_lines > 1 else usable_h
+        # Domain warp tables
+        perm = perm2 = None
+        if self.warp_strength > 0:
+            perm = _build_perm(self.seed + 111)
+            perm2 = _build_perm(self.seed + 222)
 
         for li in range(self.num_lines):
-            y_base = margin_y + li * spacing
-            y_norm = li / max(self.num_lines - 1, 1)
+            y_base = line_ys[li]
+            y_norm = y_base / h
 
-            # Build master control points
-            num_ctrl = max(3, int(math.ceil(w / self.control_spacing)) + 1)
-            ctrl_pts = []
-            for ci in range(num_ctrl):
-                xn = ci / (num_ctrl - 1)
-                chaos = self._chaos_factor(xn, y_norm)
-                amp = self.max_amplitude * chaos
-                ctrl_pts.append((random.random() * 2 - 1) * amp)
-
-            # Smooth control points
+            # Master control points
+            num_ctrl = max(3, self.num_bumps)
+            master = [(random.random()*2-1)*self.max_amplitude*self._chaos_factor(ci/(num_ctrl-1), y_norm)
+                      for ci in range(num_ctrl)]
+            smoothed = master
             if self.smoothing > 0:
-                for _ in range(2):
-                    ctrl_pts = self._smooth_points(ctrl_pts)
+                for _ in range(2): smoothed = self._smooth_ctrl(smoothed)
 
-            master_curve = self._generate_smooth_curve(ctrl_pts, self.resolution)
-
-            # Number of children based on chaos
             avg_chaos = self._chaos_factor(0.25, y_norm)
             n_children = max(1, round(self.max_passes * avg_chaos))
 
             for ci in range(n_children):
                 child_phase = random.random() * 1000
-
-                # Child control points: master + small random offset
-                child_ctrl = []
-                for k in range(num_ctrl):
-                    xn = k / (num_ctrl - 1)
-                    chaos = self._chaos_factor(xn, y_norm)
-                    offset = (random.random() * 2 - 1) * self.max_amplitude * self.child_spread * chaos
-                    child_ctrl.append(ctrl_pts[k] + offset)
-
-                if self.smoothing > 0:
-                    child_ctrl = self._smooth_points(child_ctrl)
-
-                child_curve = self._generate_smooth_curve(child_ctrl, self.resolution)
+                child_ctrl = self._derive_ctrl(smoothed, self.child_spread, 1.0, y_norm)
+                child_curve = self._sample_curve(child_ctrl)
+                final = self._add_wiggle(child_curve, self.child_freq_scale, child_phase, self.child_octaves, 0.08, y_norm)
 
                 points = []
-                for i in range(self.resolution + 1):
-                    xn = i / self.resolution
-                    x = xn * w
-                    chaos = self._chaos_factor(xn, y_norm)
-
-                    dy = child_curve[i]
-                    wiggle = self._child_wiggle(
-                        x, self.child_freq_scale * (1 + chaos * 2),
-                        child_phase, self.child_octaves
-                    )
-                    dy += wiggle * self.max_amplitude * 0.08 * chaos
-
-                    points.append((x, y_base + dy))
-
+                for i in range(self.RES + 1):
+                    x = (i/self.RES)*w; y = y_base + final[i]
+                    if self.warp_strength > 0 and perm:
+                        chaos = self._chaos_factor(i/self.RES, y_norm)
+                        warp_amt = self.warp_strength * chaos
+                        if warp_amt > 0.01:
+                            y += _warped_fbm(x*self.warp_scale, y*self.warp_scale,
+                                             perm, perm2, self.warp_octaves,
+                                             warp_amt, self.warp_scale/0.015, self.warp_octaves) * warp_amt
+                    points.append((x, y))
                 builder.add_polyline(points, stroke='black', width=self.stroke_width)
 
+                # Grandchildren
+                if self.gc_count > 0:
+                    n_gc = max(0, round(self.gc_count * avg_chaos))
+                    for gi in range(n_gc):
+                        gc_phase = random.random() * 1000
+                        gc_ctrl = self._derive_ctrl(child_ctrl, self.gc_spread, self.gc_amp_decay, y_norm)
+                        gc_curve = self._sample_curve(gc_ctrl)
+                        gc_final = self._add_wiggle(gc_curve, self.gc_freq_scale, gc_phase, self.gc_octaves, 0.06, y_norm)
+
+                        points = []
+                        for i in range(self.RES + 1):
+                            x = (i/self.RES)*w; y = y_base + gc_final[i]
+                            if self.warp_strength > 0 and perm:
+                                chaos = self._chaos_factor(i/self.RES, y_norm)
+                                warp_amt = self.warp_strength * chaos
+                                if warp_amt > 0.01:
+                                    y += _warped_fbm(x*self.warp_scale, y*self.warp_scale,
+                                                     perm, perm2, self.warp_octaves,
+                                                     warp_amt, self.warp_scale/0.015, self.warp_octaves) * warp_amt
+                            points.append((x, y))
+                        builder.add_polyline(points, stroke='black', width=self.stroke_width)
+
     def describe(self):
-        return "Turbulent Lines — master curve + child strand bundles"
+        return "Turbulent Lines — master + child/grandchild bundles + domain warping"
 
 
 if __name__ == '__main__':
