@@ -1,0 +1,808 @@
+<!DOCTYPE html>
+<!--
+  ╔══════════════════════════════════════════════════════════════╗
+  ║  GEOLOGICAL STRATA — displaced line field terrain            ║
+  ║  Domain-warped multi-octave noise heightmap                  ║
+  ╚══════════════════════════════════════════════════════════════╝
+-->
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Geological Strata — Generative Art</title>
+  <style>
+    :root {
+      --bg:         #0c0c0c;
+      --surface:    #161616;
+      --surface2:   #202020;
+      --border:     #2e2e2e;
+      --text:       #c8c8c8;
+      --text-dim:   #555;
+      --accent:     #5ecec6;
+      --accent-dim: #1d4d4a;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'SF Mono', 'Cascadia Code', 'Fira Code', monospace;
+      background: var(--bg);
+      color: var(--text);
+      height: 100dvh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* ── Header ─────────────────────────────────────────────────────── */
+    header {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 11px 18px;
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+
+    header h1 {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--accent);
+      letter-spacing: 0.06em;
+    }
+
+    header .subtitle {
+      font-size: 12px;
+      color: var(--text-dim);
+    }
+
+    /* ── Layout ─────────────────────────────────────────────────────── */
+    .layout {
+      display: flex;
+      flex: 1;
+      min-height: 0;
+      overflow: hidden;
+    }
+
+    /* ── Controls sidebar ───────────────────────────────────────────── */
+    .controls {
+      width: 295px;
+      flex-shrink: 0;
+      overflow-y: auto;
+      border-right: 1px solid var(--border);
+      padding: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      scrollbar-width: thin;
+      scrollbar-color: var(--border) transparent;
+    }
+
+    .group {
+      border: 1px solid var(--border);
+      border-radius: 5px;
+    }
+
+    .group-header {
+      padding: 6px 10px;
+      background: var(--surface2);
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.10em;
+      text-transform: uppercase;
+      color: var(--text-dim);
+      cursor: pointer;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      user-select: none;
+      transition: color 0.15s;
+      border-radius: 4px 4px 0 0;
+    }
+
+    .group-header:hover { color: var(--text); }
+
+    .group.collapsed .group-header { border-radius: 4px; }
+    .group.collapsed .caret { transform: rotate(-90deg); }
+    .group.collapsed .group-body { display: none; }
+
+    .caret { display: inline-block; transition: transform 0.18s; }
+
+    .group-body {
+      padding: 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      overflow-y: auto;
+      max-height: 260px;
+      scrollbar-width: thin;
+      scrollbar-color: var(--border) transparent;
+      border-radius: 0 0 4px 4px;
+    }
+
+    /* ── Individual parameter ───────────────────────────────────────── */
+    .param { display: flex; flex-direction: column; gap: 3px; }
+
+    .param-label {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      font-size: 12px;
+    }
+
+    .param-name { color: var(--text); }
+
+    .param-value {
+      color: var(--accent);
+      font-size: 11px;
+      min-width: 36px;
+      text-align: right;
+    }
+
+    /* Range slider */
+    input[type="range"] {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 100%;
+      height: 2px;
+      background: var(--border);
+      border-radius: 1px;
+      outline: none;
+      cursor: pointer;
+    }
+
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 11px;
+      height: 11px;
+      border-radius: 50%;
+      background: var(--accent);
+      cursor: pointer;
+      transition: background 0.15s, transform 0.1s;
+    }
+
+    input[type="range"]::-webkit-slider-thumb:hover {
+      background: #fff;
+      transform: scale(1.2);
+    }
+
+    input[type="range"]::-moz-range-thumb {
+      width: 11px;
+      height: 11px;
+      border: none;
+      border-radius: 50%;
+      background: var(--accent);
+      cursor: pointer;
+    }
+
+    /* ── Preview area ───────────────────────────────────────────────── */
+    .preview {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      background: var(--bg);
+    }
+
+    .svg-wrapper {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      overflow: hidden;
+      cursor: grab;
+      user-select: none;
+    }
+
+    .svg-wrapper.dragging { cursor: grabbing; }
+
+    #zoom-layer {
+      transform-origin: center center;
+      flex-shrink: 0;
+    }
+
+    #canvas {
+      background: #fff;
+      border-radius: 2px;
+      box-shadow: 0 4px 48px rgba(0, 0, 0, 0.75);
+      display: block;
+      flex-shrink: 0;
+    }
+
+    /* ── Canvas preset buttons ──────────────────────────────────────── */
+    .preset-row {
+      display: flex;
+      gap: 5px;
+      margin-bottom: 2px;
+    }
+
+    .preset-btn {
+      flex: 1;
+      padding: 4px 6px;
+      font-size: 11px;
+      min-width: 0;
+    }
+
+    .preset-btn.active {
+      border-color: var(--accent);
+      color: var(--accent);
+      background: var(--accent-dim);
+    }
+
+    /* ── Zoom indicator ─────────────────────────────────────────────── */
+    #zoom-label {
+      font-size: 11px;
+      color: var(--text-dim);
+      min-width: 38px;
+    }
+
+    /* ── Toolbar ────────────────────────────────────────────────────── */
+    .toolbar {
+      border-top: 1px solid var(--border);
+      padding: 9px 16px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-shrink: 0;
+      flex-wrap: wrap;
+    }
+
+    .seed-label {
+      font-size: 11px;
+      color: var(--text-dim);
+    }
+
+    #seed-input {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      color: var(--text);
+      font-family: inherit;
+      font-size: 12px;
+      padding: 5px 8px;
+      border-radius: 4px;
+      width: 90px;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+
+    #seed-input:focus { border-color: var(--accent); }
+
+    button {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      color: var(--text);
+      font-family: inherit;
+      font-size: 12px;
+      padding: 6px 14px;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: border-color 0.15s, color 0.15s, background 0.15s;
+      white-space: nowrap;
+    }
+
+    button:hover { border-color: var(--accent); color: var(--accent); }
+
+    #download-btn {
+      background: var(--accent-dim);
+      border-color: var(--accent);
+      color: var(--accent);
+      margin-left: auto;
+    }
+
+    #download-btn:hover { background: var(--accent); color: #000; }
+
+    .render-time {
+      font-size: 10px;
+      color: var(--text-dim);
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>Geological Strata</h1>
+  <span class="subtitle">displaced line field &middot; domain-warped noise terrain</span>
+</header>
+
+<div class="layout">
+  <aside class="controls" id="controls"></aside>
+
+  <main class="preview">
+    <div class="svg-wrapper" id="svg-wrapper">
+      <div id="zoom-layer">
+        <svg id="canvas" xmlns="http://www.w3.org/2000/svg"></svg>
+      </div>
+    </div>
+
+    <div class="toolbar">
+      <span class="seed-label">seed</span>
+      <input type="number" id="seed-input" value="42" min="0" max="99999999">
+      <button id="randomize-btn">&#9889; randomize</button>
+      <button id="rerender-btn">&#8634; re-render</button>
+      <span class="render-time" id="render-time"></span>
+      <button id="zoom-reset-btn">&#8857; reset zoom</button>
+      <span id="zoom-label">100%</span>
+      <button id="download-btn">&#8595; save SVG</button>
+    </div>
+  </main>
+</div>
+
+<script>
+// ════════════════════════════════════════════════════════════════════
+//  BOILERPLATE — seeded PRNG
+// ════════════════════════════════════════════════════════════════════
+function makePRNG(seed) {
+  let s = seed >>> 0;
+  const rand = () => {
+    s = (s + 0x6D2B79F5) >>> 0;
+    let t = Math.imul(s ^ (s >>> 15), 1 | s);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 0x100000000;
+  };
+  rand.uniform = (a, b) => a + rand() * (b - a);
+  rand.gauss = () => {
+    const u = Math.max(rand(), 1e-12);
+    return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * rand());
+  };
+  return rand;
+}
+
+// ════════════════════════════════════════════════════════════════════
+//  SCHEMA
+// ════════════════════════════════════════════════════════════════════
+const ARTWORK_NAME = 'geological-strata';
+
+const SCHEMA = [
+  {
+    group: 'Canvas',
+    presets: [
+      { label: 'A4',     w: 210, h: 297 },
+      { label: 'A3',     w: 297, h: 420 },
+      { label: 'Square', w: 200, h: 200 },
+    ],
+    items: [
+      { id: 'width',  label: 'Width (mm)',  min: 60,  max: 420, step: 5, def: 200 },
+      { id: 'height', label: 'Height (mm)', min: 60,  max: 594, step: 5, def: 200 },
+    ],
+  },
+  {
+    group: 'Line Field',
+    items: [
+      { id: 'numLines',     label: 'Line count',     min: 30,  max: 500, step: 5,  def: 200 },
+      { id: 'xResolution',  label: 'X resolution',   min: 50,  max: 600, step: 10, def: 300 },
+    ],
+  },
+  {
+    group: 'Displacement',
+    items: [
+      { id: 'displacement', label: 'Amplitude (mm)', min: 5,   max: 100, step: 1,   def: 40 },
+      { id: 'noiseScale',   label: 'Noise scale',    min: 0.002, max: 0.05, step: 0.001, def: 0.012 },
+      { id: 'octaves',      label: 'Octaves',        min: 1,   max: 10,  step: 1,   def: 6 },
+      { id: 'lacunarity',   label: 'Lacunarity',     min: 1.2, max: 3.0, step: 0.1, def: 2.0 },
+      { id: 'gain',         label: 'Gain',           min: 0.2, max: 0.8, step: 0.05, def: 0.50 },
+    ],
+  },
+  {
+    group: 'Domain Warping',
+    items: [
+      { id: 'warpStrength', label: 'Warp strength',  min: 0.0, max: 8.0, step: 0.1,   def: 2.5 },
+      { id: 'warpScale',    label: 'Warp scale',     min: 0.002, max: 0.04, step: 0.001, def: 0.008 },
+      { id: 'warpOctaves',  label: 'Warp octaves',   min: 1,   max: 6,   step: 1,     def: 3 },
+    ],
+  },
+  {
+    group: 'Boundary',
+    items: [
+      { id: 'edgeRoughness', label: 'Edge roughness', min: 0.0, max: 1.5, step: 0.05, def: 0.70 },
+      { id: 'edgeScale',     label: 'Edge noise scale', min: 0.005, max: 0.06, step: 0.001, def: 0.020 },
+      { id: 'edgeInset',     label: 'Edge inset',     min: 0.02, max: 0.20, step: 0.01, def: 0.05 },
+    ],
+  },
+  {
+    group: 'Style',
+    items: [
+      { id: 'strokeWidth',  label: 'Stroke width',   min: 0.1, max: 1.0, step: 0.05, def: 0.35 },
+    ],
+  },
+];
+
+// ════════════════════════════════════════════════════════════════════
+//  BOILERPLATE: state, controls builder, helpers
+// ════════════════════════════════════════════════════════════════════
+const state = {};
+SCHEMA.forEach(g => g.items.forEach(p => { state[p.id] = p.def; }));
+
+const controlsEl = document.getElementById('controls');
+const sliders    = {};
+const valEls     = {};
+let   presetBtns = [];
+
+SCHEMA.forEach(({ group, items, presets }) => {
+  const groupEl = document.createElement('div');
+  groupEl.className = 'group';
+
+  const hdr = document.createElement('div');
+  hdr.className = 'group-header';
+  hdr.innerHTML = `${group} <span class="caret">&#9662;</span>`;
+  hdr.addEventListener('click', () => groupEl.classList.toggle('collapsed'));
+
+  const body = document.createElement('div');
+  body.className = 'group-body';
+
+  if (presets) {
+    const row = document.createElement('div');
+    row.className = 'preset-row';
+    presets.forEach(({ label, w, h }) => {
+      const btn = document.createElement('button');
+      btn.className = 'preset-btn';
+      btn.textContent = label;
+      presetBtns.push({ btn, w, h });
+      btn.addEventListener('click', () => {
+        state.width  = w;  state.height = h;
+        sliders.width.value  = w; sliders.height.value = h;
+        valEls.width.textContent  = String(w);
+        valEls.height.textContent = String(h);
+        updateActivePreset();
+        render();
+      });
+      row.appendChild(btn);
+    });
+    body.appendChild(row);
+  }
+
+  items.forEach(param => {
+    const wrap   = document.createElement('div');
+    wrap.className = 'param';
+    const row    = document.createElement('div');
+    row.className = 'param-label';
+    const nameEl = document.createElement('span');
+    nameEl.className = 'param-name';
+    nameEl.textContent = param.label;
+    const valEl  = document.createElement('span');
+    valEl.className = 'param-value';
+    valEl.id = `val-${param.id}`;
+    valEl.textContent = formatVal(param.def, param.step);
+    valEls[param.id] = valEl;
+    row.append(nameEl, valEl);
+
+    const slider = document.createElement('input');
+    slider.type = 'range';
+    slider.min = param.min; slider.max = param.max; slider.step = param.step;
+    slider.value = param.def;
+    sliders[param.id] = slider;
+
+    slider.addEventListener('input', () => {
+      const v = parseFloat(slider.value);
+      state[param.id] = v;
+      valEl.textContent = formatVal(v, param.step);
+      if (param.id === 'width' || param.id === 'height') updateActivePreset();
+      scheduleRender();
+    });
+
+    wrap.append(row, slider);
+    body.append(wrap);
+  });
+
+  groupEl.append(hdr, body);
+  controlsEl.append(groupEl);
+});
+
+function updateActivePreset() {
+  presetBtns.forEach(({ btn, w, h }) => {
+    btn.classList.toggle('active', state.width === w && state.height === h);
+  });
+}
+updateActivePreset();
+
+function formatVal(v, step) {
+  if (step >= 1) return String(Math.round(v));
+  const decimals = String(step).split('.')[1]?.length ?? 2;
+  return v.toFixed(Math.min(decimals, 3));
+}
+
+// ── SVG helpers ──────────────────────────────────────────────────────
+const NS    = 'http://www.w3.org/2000/svg';
+const svgEl = document.getElementById('canvas');
+
+function svgEl_(tag, attrs) {
+  const e = document.createElementNS(NS, tag);
+  for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v);
+  return e;
+}
+
+// ════════════════════════════════════════════════════════════════════
+//  NOISE ENGINE — gradient noise + fBm + domain warping
+// ════════════════════════════════════════════════════════════════════
+
+// 12 gradient vectors
+const GRADS = [];
+for (let i = 0; i < 12; i++) {
+  const a = Math.PI * 2 * i / 12;
+  GRADS.push([Math.cos(a), Math.sin(a)]);
+}
+
+function buildPerm(seed) {
+  // Fisher-Yates shuffle with seeded PRNG
+  const rng = makePRNG(seed);
+  const p = [];
+  for (let i = 0; i < 256; i++) p[i] = i;
+  for (let i = 255; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1));
+    [p[i], p[j]] = [p[j], p[i]];
+  }
+  return p.concat(p); // double for wrapping
+}
+
+function noise2(x, y, perm) {
+  const xi = (Math.floor(x) & 255);
+  const yi = (Math.floor(y) & 255);
+  const xf = x - Math.floor(x);
+  const yf = y - Math.floor(y);
+
+  // Fade curves
+  const u = xf * xf * xf * (xf * (xf * 6.0 - 15.0) + 10.0);
+  const v = yf * yf * yf * (yf * (yf * 6.0 - 15.0) + 10.0);
+
+  const aa = perm[perm[xi] + yi] % 12;
+  const ab = perm[perm[xi] + yi + 1] % 12;
+  const ba = perm[perm[xi + 1] + yi] % 12;
+  const bb = perm[perm[xi + 1] + yi + 1] % 12;
+
+  function dot(gi, fx, fy) {
+    const g = GRADS[gi];
+    return g[0] * fx + g[1] * fy;
+  }
+
+  const x1 = dot(aa, xf, yf) + u * (dot(ba, xf - 1, yf) - dot(aa, xf, yf));
+  const x2 = dot(ab, xf, yf - 1) + u * (dot(bb, xf - 1, yf - 1) - dot(ab, xf, yf - 1));
+  return x1 + v * (x2 - x1);
+}
+
+function fbm(x, y, perm, octaves, lacunarity, gain) {
+  let total = 0, amplitude = 1, frequency = 1, maxAmp = 0;
+  for (let i = 0; i < octaves; i++) {
+    total += noise2(x * frequency, y * frequency, perm) * amplitude;
+    maxAmp += amplitude;
+    amplitude *= gain;
+    frequency *= lacunarity;
+  }
+  return total / maxAmp;
+}
+
+function warpedFbm(x, y, perm, perm2, octaves, warpStrength, warpScale, warpOctaves, lacunarity, gain) {
+  const wx = fbm(x * warpScale, y * warpScale, perm2, warpOctaves, lacunarity, gain) * warpStrength;
+  const wy = fbm(x * warpScale + 5.2, y * warpScale + 1.3, perm2, warpOctaves, lacunarity, gain) * warpStrength;
+  return fbm(x + wx, y + wy, perm, octaves, lacunarity, gain);
+}
+
+// ════════════════════════════════════════════════════════════════════
+//  render()
+// ════════════════════════════════════════════════════════════════════
+function render() {
+  const t0   = performance.now();
+  const p    = state;
+  const seed = Math.max(0, parseInt(document.getElementById('seed-input').value) || 0);
+
+  // ── Canvas setup ─────────────────────────────────────────────────
+  const margin = 2;
+  const vw = p.width  + 2 * margin;
+  const vh = p.height + 2 * margin;
+  const ox = margin, oy = margin;
+
+  svgEl.setAttribute('viewBox', `0 0 ${vw} ${vh}`);
+  while (svgEl.firstChild) svgEl.removeChild(svgEl.lastChild);
+
+  // ── Build noise permutation tables ───────────────────────────────
+  const perm     = buildPerm(seed);
+  const perm2    = buildPerm(seed + 12345);
+  const permEdge = buildPerm(seed + 67890);
+
+  const W = p.width;
+  const H = p.height;
+  const numLines    = p.numLines;
+  const xRes        = p.xResolution;
+  const displacement = p.displacement;
+  const noiseScale  = p.noiseScale;
+  const octaves     = p.octaves;
+  const lacunarity  = p.lacunarity;
+  const gain        = p.gain;
+  const warpStrength = p.warpStrength;
+  const warpScale   = p.warpScale;
+  const warpOctaves = p.warpOctaves;
+  const edgeRoughness = p.edgeRoughness;
+  const edgeScale   = p.edgeScale;
+  const edgeInset   = p.edgeInset;
+  const sw          = p.strokeWidth;
+
+  // Relative warp scale (same as Python: warpScale / noiseScale)
+  const relWarpScale = warpScale / Math.max(noiseScale, 1e-6);
+
+  // ── Draw lines ───────────────────────────────────────────────────
+  for (let li = 0; li < numLines; li++) {
+    const baseY = (li / (numLines - 1)) * H;
+    let pts = [];
+
+    for (let xi = 0; xi <= xRes; xi++) {
+      const x = (xi / xRes) * W;
+
+      // Displacement from warped noise
+      const disp = warpedFbm(
+        x * noiseScale, baseY * noiseScale,
+        perm, perm2,
+        octaves, warpStrength, relWarpScale, warpOctaves,
+        lacunarity, gain
+      );
+      const yDisp = baseY + disp * displacement;
+
+      // Edge mask
+      const dl = x / (W * edgeInset + 1e-6);
+      const dr = (W - x) / (W * edgeInset + 1e-6);
+      const dt = baseY / (H * edgeInset + 1e-6);
+      const db = (H - baseY) / (H * edgeInset + 1e-6);
+      let d = Math.min(dl, dr, dt, db);
+
+      if (edgeRoughness > 0) {
+        const nv = fbm(x * edgeScale, baseY * edgeScale, permEdge, 3, 2.0, 0.5);
+        d += nv * edgeRoughness * 0.8;
+      }
+      d = Math.max(0, Math.min(1, d));
+
+      if (d < 0.01) {
+        // Break the line
+        if (pts.length >= 2) {
+          const ptsStr = pts.map(([px, py]) =>
+            `${(px + ox).toFixed(2)},${(py + oy).toFixed(2)}`
+          ).join(' ');
+          svgEl.appendChild(svgEl_('polyline', {
+            points: ptsStr,
+            fill: 'none',
+            stroke: 'black',
+            'stroke-width': String(sw),
+            'stroke-linecap': 'round',
+            'stroke-linejoin': 'round',
+          }));
+        }
+        pts = [];
+        continue;
+      }
+
+      pts.push([x, yDisp]);
+    }
+
+    // Draw remaining segment
+    if (pts.length >= 2) {
+      const ptsStr = pts.map(([px, py]) =>
+        `${(px + ox).toFixed(2)},${(py + oy).toFixed(2)}`
+      ).join(' ');
+      svgEl.appendChild(svgEl_('polyline', {
+        points: ptsStr,
+        fill: 'none',
+        stroke: 'black',
+        'stroke-width': String(sw),
+        'stroke-linecap': 'round',
+        'stroke-linejoin': 'round',
+      }));
+    }
+  }
+
+  // ── Finish ───────────────────────────────────────────────────────
+  fitSvg();
+  document.getElementById('render-time').textContent =
+    `${(performance.now() - t0).toFixed(1)} ms`;
+}
+
+// ════════════════════════════════════════════════════════════════════
+//  BOILERPLATE: fit, zoom/pan, toolbar
+// ════════════════════════════════════════════════════════════════════
+const wrapper = document.querySelector('.svg-wrapper');
+
+function fitSvg() {
+  const vbAttr = svgEl.getAttribute('viewBox');
+  if (!vbAttr) return;
+  const [, , vw, vh] = vbAttr.split(' ').map(Number);
+  const pad = 24;
+  const availW = wrapper.clientWidth  - pad * 2;
+  const availH = wrapper.clientHeight - pad * 2;
+  const aspect = vw / vh;
+  let displayW, displayH;
+  if (availW / availH > aspect) {
+    displayH = availH; displayW = availH * aspect;
+  } else {
+    displayW = availW; displayH = availW / aspect;
+  }
+  svgEl.style.width  = `${Math.floor(displayW)}px`;
+  svgEl.style.height = `${Math.floor(displayH)}px`;
+}
+
+new ResizeObserver(fitSvg).observe(wrapper);
+
+let timer = null;
+function scheduleRender() { clearTimeout(timer); timer = setTimeout(render, 55); }
+
+document.getElementById('randomize-btn').addEventListener('click', () => {
+  document.getElementById('seed-input').value = Math.floor(Math.random() * 9_999_999);
+  render();
+});
+
+document.getElementById('rerender-btn').addEventListener('click', render);
+document.getElementById('seed-input').addEventListener('change', render);
+document.getElementById('seed-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter') render();
+});
+
+document.getElementById('download-btn').addEventListener('click', () => {
+  const seed  = document.getElementById('seed-input').value;
+  const clone = svgEl.cloneNode(true);
+  clone.setAttribute('width',  `${state.width  + 4}mm`);
+  clone.setAttribute('height', `${state.height + 4}mm`);
+  const bg = document.createElementNS(NS, 'rect');
+  bg.setAttribute('width', '100%'); bg.setAttribute('height', '100%');
+  bg.setAttribute('fill', 'white');
+  clone.insertBefore(bg, clone.firstChild);
+  clone.setAttribute('xmlns', NS);
+  const blob = new Blob(
+    [`<?xml version="1.0" encoding="UTF-8"?>\n<!-- ${ARTWORK_NAME} | seed=${seed} -->\n`, clone.outerHTML],
+    { type: 'image/svg+xml' },
+  );
+  const a = document.createElement('a');
+  a.href     = URL.createObjectURL(blob);
+  a.download = `${ARTWORK_NAME}-s${seed}.svg`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+});
+
+// Zoom & pan
+const svgWrapper = document.getElementById('svg-wrapper');
+const zoomLayer  = document.getElementById('zoom-layer');
+const zoomLabel  = document.getElementById('zoom-label');
+let zoom = 1, pan = { x: 0, y: 0 };
+
+function applyTransform() {
+  zoomLayer.style.transform = `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`;
+  zoomLabel.textContent = `${Math.round(zoom * 100)}%`;
+}
+
+function resetZoom() { zoom = 1; pan = { x: 0, y: 0 }; applyTransform(); }
+
+svgWrapper.addEventListener('wheel', e => {
+  e.preventDefault();
+  const rect   = svgWrapper.getBoundingClientRect();
+  const mx = e.clientX - rect.left - rect.width  / 2;
+  const my = e.clientY - rect.top  - rect.height / 2;
+  const factor  = e.deltaY < 0 ? 1.12 : 1 / 1.12;
+  const newZoom = Math.max(0.1, Math.min(12, zoom * factor));
+  pan.x = mx - (mx - pan.x) * (newZoom / zoom);
+  pan.y = my - (my - pan.y) * (newZoom / zoom);
+  zoom  = newZoom;
+  applyTransform();
+}, { passive: false });
+
+let dragging = false, dragStart = { x: 0, y: 0 }, panStart = { x: 0, y: 0 };
+svgWrapper.addEventListener('mousedown', e => {
+  if (e.button !== 0) return;
+  e.preventDefault();
+  dragging = true;
+  dragStart = { x: e.clientX, y: e.clientY };
+  panStart  = { ...pan };
+  svgWrapper.classList.add('dragging');
+});
+window.addEventListener('mousemove', e => {
+  if (!dragging) return;
+  pan.x = panStart.x + e.clientX - dragStart.x;
+  pan.y = panStart.y + e.clientY - dragStart.y;
+  applyTransform();
+});
+window.addEventListener('mouseup', () => {
+  if (!dragging) return;
+  dragging = false;
+  svgWrapper.classList.remove('dragging');
+});
+svgWrapper.addEventListener('dblclick', resetZoom);
+document.getElementById('zoom-reset-btn').addEventListener('click', resetZoom);
+
+// Initial render
+render();
+</script>
+</body>
+</html>
